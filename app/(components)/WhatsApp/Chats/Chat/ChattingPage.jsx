@@ -1,34 +1,55 @@
 'use client'
 
+import { useEffect, useRef } from "react";
 import { Box, Typography } from "@mui/material";
 // import { useEffect, useState } from "react";
 import SearchButton from "./SendMessage";
 // import { getSocket } from "../../../../../utils/socket";
 
-const ChattingPage = ({ userID, contactPerson, messages, contactPersonId, contactPersonEmail, fromID, fromEmail, onLocalSend }) => {
+const ChattingPage = ({ userID, contactPerson, messages, contactPersonId, contactPersonEmail, fromID, fromEmail }) => {
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, contactPersonEmail]);
 
 
   return (
     <Box
       sx={{
         width: "100%",
-        height: "100vh",
+        flex: 1,
+        minHeight: 0,
         backgroundImage: "url('/whatsappbg.png')",
         backgroundRepeat: "repeat",
         backgroundSize: "auto",
         backgroundPosition: "center",
-        position: 'relative',
         display: "flex",
         flexDirection: "column",
-        justifyContent: "flex-end",
       }}
     >
       {/* Messages Container */}
       <Box
         sx={{
           flex: 1,
+          minHeight: 0,
           overflowY: "auto",
           padding: 2,
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#2f3133 transparent',
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: 'transparent',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: '#2f3133',
+            borderRadius: '10px',
+          },
+          '&::-webkit-scrollbar-thumb:hover': {
+            backgroundColor: '#3b3f42',
+          },
         }}
       >
         {messages.map((msg, index) => (
@@ -54,10 +75,20 @@ const ChattingPage = ({ userID, contactPerson, messages, contactPersonId, contac
             </Typography>
           </Box>
         ))}
+        <Box ref={bottomRef} />
       </Box>
 
       {/* Input Box */}
-      <Box display='flex' position='absolute' width='100%' bottom={5}>
+      <Box
+        display='flex'
+        width='100%'
+        sx={{
+          borderTop: '1px solid #2b2b2b',
+          backgroundColor: '#161717',
+          px: 1,
+          py: 0.5,
+        }}
+      >
         <SearchButton
           userID={userID}
           contactPerson={contactPerson}
@@ -65,7 +96,6 @@ const ChattingPage = ({ userID, contactPerson, messages, contactPersonId, contac
           contactPersonEmail={contactPersonEmail}
           fromID={fromID}
           fromEmail={fromEmail}
-          onLocalSend={onLocalSend}
         />
       </Box>
     </Box>

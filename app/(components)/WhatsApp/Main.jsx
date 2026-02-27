@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Box, Divider } from "@mui/material";
 import LeftSlider from "./LeftSlider";
 import Chats from "./Chats/Chats";
 import Chat from "./Chats/Chat/Chat";
 import { getSocket } from "@/utils/socket";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000";
 
 const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => {
   const [contactPerson, setContactPerson] = useState(null);
@@ -15,73 +17,159 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
 
   const [messages, setMessages] = useState([]);
   const [lastMessage, setLastMessage] = useState({});
+  const [unseenCounts, setUnseenCounts] = useState({});
+
+  const fromEmailRef = useRef(null);
+  const contactEmailRef = useRef(null);
 
   const socket = getSocket();
+
+  useEffect(() => {
+    fromEmailRef.current = fromEmail ? String(fromEmail).toLowerCase() : null;
+  }, [fromEmail]);
+
+  useEffect(() => {
+    contactEmailRef.current = contactPersonEmail ? String(contactPersonEmail).toLowerCase() : null;
+  }, [contactPersonEmail]);
 
   // ⭐ Register socket
   useEffect(() => {
     if (!socket || !fromEmail) return;
 
-    socket.emit("register", String(fromEmail));
+    const registerUser = () => {
+      socket.emit("register", String(fromEmail).toLowerCase());
+    };
+
+    registerUser();
+    socket.on("connect", registerUser);
+
+    return () => {
+      socket.off("connect", registerUser);
+    };
   }, [socket, fromEmail]);
+
+  useEffect(() => {
+    if (!fromID) return;
+
+    const fetchChatOverview = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/users/chat-overview`, {
+          credentials: "include",
+        });
+
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const list = data?.data || [];
+
+        const lastMap = {};
+        const unseenMap = {};
+
+        list.forEach((item) => {
+          const emailKey = String(item.email || "").toLowerCase();
+          if (!emailKey) return;
+
+          lastMap[emailKey] = item.last_message || "";
+          unseenMap[emailKey] = Number(item.unseen_count || 0);
+        });
+
+        setLastMessage(lastMap);
+        setUnseenCounts(unseenMap);
+      } catch (error) {
+        console.error("Failed to fetch chat overview", error);
+      }
+    };
+
+    fetchChatOverview();
+  }, [fromID]);
+
+  useEffect(() => {
+    if (!fromID || !contactPersonId || !contactPersonEmail) {
+      setMessages([]);
+      return;
+    }
+
+    const fetchHistory = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/users/chat-history/${contactPersonId}`, {
+          credentials: "include",
+        });
+
+        if (!res.ok) {
+          setMessages([]);
+          return;
+        }
+
+        const data = await res.json();
+        setMessages(data?.data || []);
+
+        await fetch(`${API_BASE_URL}/api/users/chat-read/${contactPersonId}`, {
+          method: "POST",
+          credentials: "include",
+        });
+
+        setUnseenCounts((prev) => ({
+          ...prev,
+          [String(contactPersonEmail).toLowerCase()]: 0,
+        }));
+      } catch (error) {
+        console.error("Failed to fetch chat history", error);
+        setMessages([]);
+      }
+    };
+
+    fetchHistory();
+  }, [fromID, contactPersonId, contactPersonEmail]);
 
   // ⭐ Listen for private messages
   useEffect(() => {
     if (!socket) return;
 
     const handlePrivateMessage = (payload) => {
-      const from = String(payload.from ?? payload.fromID ?? payload.fromUserId ?? "");
-      const to = String(payload.to ?? payload.toID ?? payload.toUserId ?? "");
+      const from = String(payload.from ?? payload.fromID ?? payload.fromUserId ?? "").toLowerCase();
+      const to = String(payload.to ?? payload.toID ?? payload.toUserId ?? "").toLowerCase();
       const text = payload.text ?? payload.message ?? "";
       if (!from || !to || !text) return;
 
-      setMessages(prev => [
+      const currentFromEmail = fromEmailRef.current;
+      const currentContactEmail = contactEmailRef.current;
+      if (!currentFromEmail) return;
+
+      const messageItem = {
+        id: payload.id ?? null,
+        from,
+        to,
+        text,
+        timestamp: payload.createdAt ?? payload.timestamp ?? Date.now(),
+      };
+
+      const isActiveConversation =
+        currentContactEmail &&
+        ((from === currentFromEmail && to === currentContactEmail) ||
+          (from === currentContactEmail && to === currentFromEmail));
+
+      if (isActiveConversation) {
+        setMessages((prev) => [...prev, messageItem]);
+      }
+
+      const otherEmail = from === currentFromEmail ? to : from;
+      setLastMessage((prev) => ({
         ...prev,
-        { from, to, text, timestamp: payload.timestamp ?? Date.now() }
-      ]);
+        [otherEmail]: text,
+      }));
+
+      if (to === currentFromEmail && from !== currentFromEmail && from !== currentContactEmail) {
+        setUnseenCounts((prev) => ({
+          ...prev,
+          [from]: (prev[from] || 0) + 1,
+        }));
+      }
     };
 
     socket.on("privateMessage", handlePrivateMessage);
 
     return () => socket.off("privateMessage", handlePrivateMessage);
   }, [socket]);
-
-  const handleLocalSend = ({ toEmail, message }) => {
-    if (!fromEmail || !toEmail || !message?.trim()) return;
-    setMessages(prev => [
-      ...prev,
-      {
-        from: String(fromEmail),
-        to: String(toEmail),
-        text: message,
-        timestamp: Date.now()
-      }
-    ]);
-  };
-
-  // ⭐ Last message map
-  useEffect(() => {
-    if (!fromEmail) return;
-
-    const map = {};
-    messages.forEach(msg => {
-      const other =
-        msg.from === fromEmail ? msg.to :
-        msg.to === fromEmail ? msg.from :
-        null;
-
-      if (other) map[other] = msg.text;
-    });
-
-    setLastMessage(map);
-  }, [messages, fromEmail]);
-
-  // ⭐ Filter chat view
-  const filteredMessages = messages.filter(
-    m =>
-      (m.from === fromEmail && m.to === contactPersonEmail) ||
-      (m.from === contactPersonEmail && m.to === fromEmail)
-  );
 
   return (
     <Box display='flex' width='100%' height='100vh'>
@@ -98,8 +186,11 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
         setContactPersonEmail={setContactPersonEmail}
         selected={selected}
         lastMessage={lastMessage}
+        unseenCounts={unseenCounts}
         setSelected={setSelected}
         setUserID={setUserID}
+        fromID={fromID}
+        fromEmail={fromEmail}
       />
 
       <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />
@@ -113,8 +204,7 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
         setSelected={setSelected}
         contactPersonId={contactPersonId}
         contactPersonEmail={contactPersonEmail}
-        messages={filteredMessages}
-        onLocalSend={handleLocalSend}
+        messages={messages}
       />
     </Box>
   );

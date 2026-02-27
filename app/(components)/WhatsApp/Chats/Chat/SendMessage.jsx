@@ -10,7 +10,7 @@ import {
 import { InputAdornment, TextField, IconButton, Tooltip } from "@mui/material";
 import { getSocket } from "../../../../../utils/socket";
 
-const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEmail, fromID, fromEmail, onLocalSend }) => {
+const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEmail, fromID, fromEmail }) => {
 
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
