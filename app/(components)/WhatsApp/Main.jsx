@@ -145,6 +145,8 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
         from,
         to,
         text,
+        messageType: payload.messageType || "text",
+        file: payload.file || null,
         timestamp: payload.createdAt ?? payload.timestamp ?? Date.now(),
       };
 
@@ -155,6 +157,23 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
 
       if (isActiveConversation) {
         setMessages((prev) => [...prev, messageItem]);
+
+        if (to === currentFromEmail && from !== currentFromEmail && payload.id) {
+          socket.emit("messageDelivered", {
+            messageId: payload.id,
+            from,
+          });
+
+          socket.emit("messageSeen", {
+            messageId: payload.id,
+            from,
+          });
+        }
+      } else if (to === currentFromEmail && from !== currentFromEmail && payload.id) {
+        socket.emit("messageDelivered", {
+          messageId: payload.id,
+          from,
+        });
       }
 
       const otherEmail = from === currentFromEmail ? to : from;
@@ -173,7 +192,31 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
 
     socket.on("privateMessage", handlePrivateMessage);
 
-    return () => socket.off("privateMessage", handlePrivateMessage);
+    const handleMessageStatus = (payload) => {
+      const messageId = payload?.messageId;
+      const status = payload?.status;
+      if (!messageId || !status) return;
+
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === messageId
+            ? {
+                ...item,
+                status,
+                isRead: status === "read" ? true : item.isRead,
+                statusUpdatedAt: payload.updatedAt || Date.now(),
+              }
+            : item
+        )
+      );
+    };
+
+    socket.on("messageStatus", handleMessageStatus);
+
+    return () => {
+      socket.off("privateMessage", handlePrivateMessage);
+      socket.off("messageStatus", handleMessageStatus);
+    };
   }, [socket]);
 
   return (
