@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Send as SendIcon,
   Add,
@@ -9,6 +9,11 @@ import {
   Image as ImageIcon,
   VideoFile as VideoFileIcon,
   InsertDriveFile as InsertDriveFileIcon,
+  CameraAlt as CameraAltIcon,
+  Cameraswitch as CameraSwitchIcon,
+  FiberManualRecord as RecordIcon,
+  Stop as StopIcon,
+  PhotoCamera as PhotoCameraIcon,
 } from "@mui/icons-material";
 import {
   InputAdornment,
@@ -19,6 +24,13 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Box,
+  Stack,
 } from "@mui/material";
 import { getSocket } from "../../../../../utils/socket";
 import { getChatApiBaseUrl } from "@/utils/chatApiBase";
@@ -31,6 +43,24 @@ const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEma
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const [selectedFileType, setSelectedFileType] = useState("document");
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState("environment");
+  const [cameraMode, setCameraMode] = useState("photo");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isUploadingCameraMedia, setIsUploadingCameraMedia] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const recorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const photoCaptureInputRef = useRef(null);
+  const videoCaptureInputRef = useRef(null);
+
+  const isLiveCameraSupported =
+    typeof window !== "undefined" &&
+    window.isSecureContext &&
+    !!navigator?.mediaDevices?.getUserMedia;
 
   const socket = getSocket();
 
@@ -40,6 +70,84 @@ const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEma
     if (type === "image") return "image/*";
     if (type === "video") return "video/*";
     return ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.7z,.csv";
+  };
+
+  const stopCameraStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+  };
+
+  const startCameraStream = async (mode = cameraMode, facingMode = cameraFacingMode) => {
+    if (!isLiveCameraSupported) {
+      setCameraError("Live camera preview is not available on this device/network. Use quick capture below.");
+      return;
+    }
+
+    try {
+      setCameraError("");
+      stopCameraStream();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode },
+        audio: mode === "video",
+      });
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (error) {
+      setCameraError("Camera permission denied or unavailable. Use quick capture below.");
+      console.error("Unable to access camera", error);
+    }
+  };
+
+  useEffect(() => {
+    if (cameraOpen) {
+      startCameraStream(cameraMode, cameraFacingMode);
+    }
+
+    return () => {
+      stopCameraStream();
+    };
+  }, [cameraOpen]);
+
+  const uploadAndSendFile = async (file) => {
+    if (!file) return;
+    if (!contactPerson || !contactPersonEmail || !fromEmail) return;
+
+    const apiBase = getChatApiBaseUrl();
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("fromID", String(fromID || ""));
+    formData.append("toID", String(contactPersonId || ""));
+    formData.append("fromEmail", String(fromEmail || "").toLowerCase());
+    formData.append("toEmail", String(contactPersonEmail || "").toLowerCase());
+
+    const res = await fetch(`${apiBase}/api/users/chat-upload`, {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success || !data?.file) {
+      throw new Error(data?.message || "Failed to upload file");
+    }
+
+    socket.emit("privateMessage", {
+      fromUserId: userID,
+      fromID: String(fromID),
+      fromEmail: String(fromEmail).toLowerCase(),
+      toID: String(contactPersonId),
+      toEmail: String(contactPersonEmail).toLowerCase(),
+      toUserId: contactPerson,
+      messageType: "file",
+      file: data.file,
+      message: file.name,
+      timestamp: Date.now(),
+    });
   };
 
   // -------- SEND MESSAGE ----------
@@ -72,43 +180,129 @@ const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEma
     }
   };
 
+  const handleCameraOpen = () => {
+    setAnchorEl(null);
+    setCameraError("");
+    setCameraOpen(true);
+  };
+
+  const handleCameraClose = () => {
+    if (isRecording && recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+    }
+    setIsRecording(false);
+    stopCameraStream();
+    setCameraOpen(false);
+  };
+
+  const handleSwitchCamera = async () => {
+    const nextFacingMode = cameraFacingMode === "environment" ? "user" : "environment";
+    setCameraFacingMode(nextFacingMode);
+    await startCameraStream(cameraMode, nextFacingMode);
+  };
+
+  const handleCameraModeChange = async (mode) => {
+    if (mode === cameraMode) return;
+
+    if (isRecording && recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+      setIsRecording(false);
+    }
+
+    setCameraMode(mode);
+    await startCameraStream(mode, cameraFacingMode);
+  };
+
+  const handleCapturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video.videoWidth || !video.videoHeight) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext("2d");
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    setIsUploadingCameraMedia(true);
+    try {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.95));
+      if (!blob) return;
+      const file = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
+      await uploadAndSendFile(file);
+      handleCameraClose();
+    } catch (error) {
+      console.error("Photo capture upload failed", error);
+    } finally {
+      setIsUploadingCameraMedia(false);
+    }
+  };
+
+  const handleRecordToggle = async () => {
+    if (!isLiveCameraSupported) return;
+    if (!streamRef.current) return;
+
+    if (isRecording && recorderRef.current?.state === "recording") {
+      recorderRef.current.stop();
+      return;
+    }
+
+    recordedChunksRef.current = [];
+    const recorder = new MediaRecorder(streamRef.current, {
+      mimeType: "video/webm",
+    });
+    recorderRef.current = recorder;
+
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.onstop = async () => {
+      setIsRecording(false);
+      const videoBlob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+      if (!videoBlob.size) return;
+
+      setIsUploadingCameraMedia(true);
+      try {
+        const file = new File([videoBlob], `camera-video-${Date.now()}.webm`, { type: "video/webm" });
+        await uploadAndSendFile(file);
+        handleCameraClose();
+      } catch (error) {
+        console.error("Video upload failed", error);
+      } finally {
+        setIsUploadingCameraMedia(false);
+      }
+    };
+
+    recorder.start();
+    setIsRecording(true);
+  };
+
+  const handleQuickCaptureSelected = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingCameraMedia(true);
+    try {
+      await uploadAndSendFile(file);
+      handleCameraClose();
+    } catch (error) {
+      console.error("Quick capture upload failed", error);
+    } finally {
+      setIsUploadingCameraMedia(false);
+      event.target.value = "";
+    }
+  };
+
   const handleFileSelected = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!contactPerson || !contactPersonEmail || !fromEmail) return;
 
     try {
-      const apiBase = getChatApiBaseUrl();
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("fromID", String(fromID || ""));
-      formData.append("toID", String(contactPersonId || ""));
-      formData.append("fromEmail", String(fromEmail || "").toLowerCase());
-      formData.append("toEmail", String(contactPersonEmail || "").toLowerCase());
-
-      const res = await fetch(`${apiBase}/api/users/chat-upload`, {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.success || !data?.file) {
-        throw new Error(data?.message || "Failed to upload file");
-      }
-
-      socket.emit("privateMessage", {
-        fromUserId: userID,
-        fromID: String(fromID),
-        fromEmail: String(fromEmail).toLowerCase(),
-        toID: String(contactPersonId),
-        toEmail: String(contactPersonEmail).toLowerCase(),
-        toUserId: contactPerson,
-        messageType: "file",
-        file: data.file,
-        message: file.name,
-        timestamp: Date.now(),
-      });
+      await uploadAndSendFile(file);
     } catch (error) {
       console.error("Attachment send failed", error);
     }
@@ -188,6 +382,10 @@ const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEma
                   <ListItemIcon><InsertDriveFileIcon sx={{ color: "#21c063" }} /></ListItemIcon>
                   <ListItemText>Document</ListItemText>
                 </MenuItem>
+                <MenuItem onClick={handleCameraOpen}>
+                  <ListItemIcon><CameraAltIcon sx={{ color: "#21c063" }} /></ListItemIcon>
+                  <ListItemText>Camera</ListItemText>
+                </MenuItem>
               </Menu>
 
               <IconButton sx={{ '&:hover': { backgroundColor: '#292a2a' } }}>
@@ -201,6 +399,105 @@ const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEma
                 style={{ display: "none" }}
                 onChange={handleFileSelected}
               />
+
+              <Dialog open={cameraOpen} onClose={handleCameraClose} fullWidth maxWidth="sm">
+                <DialogTitle sx={{ backgroundColor: "#161717", color: "#fff" }}>Camera</DialogTitle>
+                <DialogContent sx={{ backgroundColor: "#161717", pt: 2 }}>
+                  {cameraError ? (
+                    <Box sx={{ color: "#ffb4b4", fontSize: 13, mb: 1 }}>{cameraError}</Box>
+                  ) : null}
+
+                  <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                    <Button
+                      variant={cameraMode === "photo" ? "contained" : "outlined"}
+                      onClick={() => handleCameraModeChange("photo")}
+                    >
+                      Photo
+                    </Button>
+                    <Button
+                      variant={cameraMode === "video" ? "contained" : "outlined"}
+                      onClick={() => handleCameraModeChange("video")}
+                    >
+                      Video
+                    </Button>
+                    <Button variant="outlined" onClick={handleSwitchCamera} startIcon={<CameraSwitchIcon />}>
+                      Switch
+                    </Button>
+                  </Stack>
+
+                  {isLiveCameraSupported ? (
+                    <Box sx={{ width: "100%", borderRadius: 2, overflow: "hidden", backgroundColor: "#000" }}>
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        style={{ width: "100%", maxHeight: "60vh", objectFit: "cover" }}
+                      />
+                    </Box>
+                  ) : (
+                    <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                      <Button
+                        variant="contained"
+                        onClick={() => photoCaptureInputRef.current?.click()}
+                        disabled={isUploadingCameraMedia}
+                        startIcon={<PhotoCameraIcon />}
+                      >
+                        Take Photo
+                      </Button>
+                      <Button
+                        variant="contained"
+                        onClick={() => videoCaptureInputRef.current?.click()}
+                        disabled={isUploadingCameraMedia}
+                        startIcon={<VideoFileIcon />}
+                      >
+                        Record Video
+                      </Button>
+                    </Stack>
+                  )}
+
+                  <canvas ref={canvasRef} style={{ display: "none" }} />
+                  <input
+                    ref={photoCaptureInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: "none" }}
+                    onChange={handleQuickCaptureSelected}
+                  />
+                  <input
+                    ref={videoCaptureInputRef}
+                    type="file"
+                    accept="video/*"
+                    capture="environment"
+                    style={{ display: "none" }}
+                    onChange={handleQuickCaptureSelected}
+                  />
+                </DialogContent>
+                <DialogActions sx={{ backgroundColor: "#161717", px: 2, pb: 2 }}>
+                  <Button onClick={handleCameraClose} disabled={isUploadingCameraMedia}>Cancel</Button>
+                  {isLiveCameraSupported && cameraMode === "photo" ? (
+                    <Button
+                      variant="contained"
+                      startIcon={<PhotoCameraIcon />}
+                      onClick={handleCapturePhoto}
+                      disabled={isUploadingCameraMedia}
+                    >
+                      Capture
+                    </Button>
+                  ) : isLiveCameraSupported ? (
+                    <Button
+                      variant="contained"
+                      color={isRecording ? "error" : "primary"}
+                      startIcon={isRecording ? <StopIcon /> : <RecordIcon />}
+                      onClick={handleRecordToggle}
+                      disabled={isUploadingCameraMedia}
+                    >
+                      {isRecording ? "Stop" : "Record"}
+                    </Button>
+                  ) : null}
+                </DialogActions>
+              </Dialog>
             </InputAdornment>
           ),
 

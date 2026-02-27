@@ -1,0 +1,134 @@
+HMIS LAN ACCESS (WSL + Windows) - QUICK REFERENCE
+Date: 2026-02-27
+
+============================================================
+WHEN TO USE THIS
+============================================================
+Use these steps whenever:
+1) You changed Wi-Fi network, or
+2) Your Windows LAN IP changed, or
+3) Your WSL IP changed after restart/reboot.
+
+Your app depends on TWO IPs:
+- LAN_IP  = Windows Wi-Fi IPv4 (phone uses this)
+- WSL_IP  = Ubuntu/WSL IP where Node/Next run
+
+============================================================
+STEP 1: GET CURRENT IPs
+============================================================
+A) In WSL terminal (Ubuntu):
+   hostname -I | awk '{print $1}'
+   -> Save as WSL_IP
+
+B) In Windows PowerShell:
+   ipconfig
+   -> Find active Wi-Fi adapter IPv4
+   -> Save as LAN_IP
+
+============================================================
+STEP 2: REGENERATE HTTPS CERT FOR NEW LAN_IP
+============================================================
+In WSL:
+   cd ~/hmis-nextjs
+   bash ./scripts/setup-lan-https.sh LAN_IP
+
+Example:
+   bash ./scripts/setup-lan-https.sh 10.153.0.41
+
+This creates/updates certs in:
+   ~/hmis-nextjs/certs/
+
+============================================================
+STEP 3: REFRESH WINDOWS PORT FORWARDING (ADMIN REQUIRED)
+============================================================
+Open Windows PowerShell AS ADMIN and run:
+
+   netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=3001
+   netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=5000
+   netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=3443
+
+   netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=3001 connectaddress=WSL_IP connectport=3001
+   netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=5000 connectaddress=WSL_IP connectport=5000
+   netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=3443 connectaddress=WSL_IP connectport=3443
+
+Check mappings:
+   netsh interface portproxy show v4tov4
+
+============================================================
+STEP 4: OPEN FIREWALL PORTS (ADMIN REQUIRED)
+============================================================
+Run in Windows PowerShell (Admin):
+
+   netsh advfirewall firewall add rule name="HMIS LAN 3001" dir=in action=allow protocol=TCP localport=3001
+   netsh advfirewall firewall add rule name="HMIS LAN 5000" dir=in action=allow protocol=TCP localport=5000
+   netsh advfirewall firewall add rule name="HMIS LAN 3443" dir=in action=allow protocol=TCP localport=3443
+
+(If rule already exists, Windows may show duplicate/exists message. That is fine.)
+
+============================================================
+STEP 5: START SERVICES IN WSL
+============================================================
+Terminal 1 (backend):
+   cd ~/hmis-backend
+   npm run dev
+
+Terminal 2 (frontend):
+   cd ~/hmis-nextjs
+   npm run dev
+
+Terminal 3 (HTTPS gateway):
+   cd ~/hmis-nextjs
+   npm run https:gateway
+
+============================================================
+STEP 6: ACCESS FROM PHONE (SAME WI-FI)
+============================================================
+Open:
+   https://LAN_IP:3443
+
+Example:
+   https://10.153.0.41:3443
+
+If certificate warning appears:
+- Install/trust CA file from:
+  ~/hmis-nextjs/certs/lan-ca.crt
+
+============================================================
+OPTIONAL: ENV CHECK FOR CHAT API
+============================================================
+File:
+   ~/hmis-nextjs/.env.local
+
+Current LAN value:
+   NEXT_PUBLIC_CHAT_API_BASE_URL=http://LAN_IP:5000
+
+If this points to old tunnel/old IP, update it and restart Next.js.
+
+============================================================
+DIFFERENT NETWORK (NOT SAME LAN)
+============================================================
+If phone is NOT on same network, local LAN IP will not work directly.
+Use one of:
+1) Tunnel URL (quick),
+2) Tailscale/ZeroTier (recommended for private access),
+3) Public domain + router port forwarding (advanced).
+
+============================================================
+TROUBLESHOOT QUICK CHECKS
+============================================================
+In WSL:
+   ss -ltnp | awk 'NR==1 || /:3001|:5000|:3443/'
+
+Expect listeners on:
+- 0.0.0.0:3001
+- 0.0.0.0:5000
+- 0.0.0.0:3443
+
+Local test:
+   curl -sS http://127.0.0.1:5000/
+   curl -k -sS https://127.0.0.1:3443/ | head
+
+If local works but phone does not:
+- Portproxy likely points to old WSL_IP, OR
+- Firewall rules missing, OR
+- Phone not on same Wi-Fi.
