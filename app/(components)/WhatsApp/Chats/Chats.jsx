@@ -6,7 +6,7 @@ import ContactsCard from "../ContactsCard";
 import { useEffect, useRef, useState } from "react";
 import FilterChips from "../ChipButtons";
 
-const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, setSelected, lastMessage, setContactPersonsID, contactPersonsID }) => {
+const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, setSelected, lastMessage, setContactPersonId, setContactPersonEmail }) => {
 
   const [settings1, setSettings1] = useState(false);
   const dropdownRef = useRef(null);
@@ -114,7 +114,7 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
           .filter(u => u.name !== userID)
           .map(user => {
 
-            const userLastMessage = lastMessage?.[String(user.id)] || "";
+            const userLastMessage = lastMessage?.[String(user.email).toLowerCase()] || "";
 
             return (
               <Box
@@ -124,7 +124,8 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
                 sx={{ cursor: 'pointer' }}
                 onClick={() => {
                   setContactPerson(user.name);
-                  setContactPersonsID(String(user.id));
+                  setContactPersonId(String(user.id));
+                  setContactPersonEmail(String(user.email).toLowerCase());
                 }}
               >
                 <ContactsCard

@@ -40,6 +40,7 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
       if (typeof window !== "undefined") {
         sessionStorage.removeItem("userID");
         sessionStorage.removeItem("fromID");
+        sessionStorage.removeItem("fromEmail");
       }
 
       setUserID(null);

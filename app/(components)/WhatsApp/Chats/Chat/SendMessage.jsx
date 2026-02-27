@@ -10,7 +10,7 @@ import {
 import { InputAdornment, TextField, IconButton, Tooltip } from "@mui/material";
 import { getSocket } from "../../../../../utils/socket";
 
-const SearchButton = ({ userID, contactPerson, contactPersonsID, fromID, onLocalSend }) => {
+const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEmail, fromID, fromEmail, onLocalSend }) => {
 
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
@@ -21,12 +21,14 @@ const SearchButton = ({ userID, contactPerson, contactPersonsID, fromID, onLocal
   // -------- SEND MESSAGE ----------
   const handleSend = () => {
     if (!value.trim()) return;
-    if (!contactPerson || !contactPersonsID || !fromID) return;
+    if (!contactPerson || !contactPersonEmail || !fromEmail) return;
 
     const payload = {
       fromUserId: userID,
       fromID: String(fromID),
-      toID: String(contactPersonsID),
+      fromEmail: String(fromEmail).toLowerCase(),
+      toID: String(contactPersonId),
+      toEmail: String(contactPersonEmail).toLowerCase(),
       toUserId: contactPerson,
       message: value,
       timestamp: Date.now()

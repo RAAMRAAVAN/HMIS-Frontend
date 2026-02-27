@@ -2,7 +2,7 @@ import { Box } from "@mui/material";
 import ChatNavbar from "./Navbar";
 import ChattingPage from "./ChattingPage";
 
-const Chat = ({ userID, contactPerson, messages, contactPersonsID, fromID, onLocalSend }) => {
+const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonEmail, fromID, fromEmail, onLocalSend }) => {
     return (<>
 
         <Box display='flex' width='65.8%' >
@@ -12,8 +12,10 @@ const Chat = ({ userID, contactPerson, messages, contactPersonsID, fromID, onLoc
                     userID={userID}
                     contactPerson={contactPerson}
                     messages={messages}
-                    contactPersonsID={contactPersonsID}
+                    contactPersonId={contactPersonId}
+                    contactPersonEmail={contactPersonEmail}
                     fromID={fromID}
+                    fromEmail={fromEmail}
                     onLocalSend={onLocalSend}
                 />
             </Box>

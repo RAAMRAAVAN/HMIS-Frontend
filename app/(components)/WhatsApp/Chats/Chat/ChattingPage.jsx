@@ -5,7 +5,7 @@ import { Box, Typography } from "@mui/material";
 import SearchButton from "./SendMessage";
 // import { getSocket } from "../../../../../utils/socket";
 
-const ChattingPage = ({ userID, contactPerson, messages, contactPersonsID, fromID, onLocalSend }) => {
+const ChattingPage = ({ userID, contactPerson, messages, contactPersonId, contactPersonEmail, fromID, fromEmail, onLocalSend }) => {
 
 
   return (
@@ -36,14 +36,14 @@ const ChattingPage = ({ userID, contactPerson, messages, contactPersonsID, fromI
             key={index}
             sx={{
               display: "flex",
-              justifyContent: String(msg.from) === String(fromID) ? "flex-end" : "flex-start",
+              justifyContent: String(msg.from) === String(fromEmail) ? "flex-end" : "flex-start",
               marginBottom: 1,
             }}
           >
             <Typography
               sx={{
-                backgroundColor: String(msg.from) === String(fromID) ? "#21c063" : "#292a2a",
-                color: String(msg.from) === String(fromID) ? "black" : "white",
+                backgroundColor: String(msg.from) === String(fromEmail) ? "#21c063" : "#292a2a",
+                color: String(msg.from) === String(fromEmail) ? "black" : "white",
                 padding: "8px 12px",
                 borderRadius: "20px",
                 maxWidth: "70%",
@@ -61,8 +61,10 @@ const ChattingPage = ({ userID, contactPerson, messages, contactPersonsID, fromI
         <SearchButton
           userID={userID}
           contactPerson={contactPerson}
-          contactPersonsID={contactPersonsID}
+          contactPersonId={contactPersonId}
+          contactPersonEmail={contactPersonEmail}
           fromID={fromID}
+          fromEmail={fromEmail}
           onLocalSend={onLocalSend}
         />
       </Box>

@@ -11,6 +11,7 @@ const WhatsApp = () => {
   const [loading, setLoading] = useState(true);
   const [userID, setUserID] = useState(null);
   const [fromID, setFromID] = useState(null);
+  const [fromEmail, setFromEmail] = useState(null);
   
   // ====== AUTO LOGIN USING COOKIE SESSION ======
   useEffect(() => {
@@ -31,14 +32,16 @@ const WhatsApp = () => {
         if (data.success) {
           setUserID(data.user.name);
           setFromID(String(data.user.id));
+          setFromEmail(data.user.email);
 
           if (typeof window !== "undefined") {
             sessionStorage.setItem("userID", data.user.name);
             sessionStorage.setItem("fromID", String(data.user.id));
+            sessionStorage.setItem("fromEmail", data.user.email);
           }
 
           const socket = getSocket();
-          socket.emit("register", String(data.user.id));
+          socket.emit("register", data.user.email);
         }
 
       } catch {
@@ -63,6 +66,7 @@ const WhatsApp = () => {
               userID={userID}
               setUserID={setUserID}
               setFromID={setFromID}
+              setFromEmail={setFromEmail}
             />
 
           ) : (
@@ -72,6 +76,7 @@ const WhatsApp = () => {
                 setLoading={setLoading}
                 userID={userID}
                 fromID={fromID}
+                fromEmail={fromEmail}
                 setUserID={setUserID}
               />
             </>

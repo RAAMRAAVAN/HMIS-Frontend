@@ -7,9 +7,10 @@ import Chats from "./Chats/Chats";
 import Chat from "./Chats/Chat/Chat";
 import { getSocket } from "@/utils/socket";
 
-const Main = ({ loading, userID, fromID, setLoading, setUserID }) => {
+const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => {
   const [contactPerson, setContactPerson] = useState(null);
-  const [contactPersonsID, setContactPersonsID] = useState(null);
+  const [contactPersonId, setContactPersonId] = useState(null);
+  const [contactPersonEmail, setContactPersonEmail] = useState(null);
   const [selected, setSelected] = useState("Chats");
 
   const [messages, setMessages] = useState([]);
@@ -19,10 +20,10 @@ const Main = ({ loading, userID, fromID, setLoading, setUserID }) => {
 
   // ⭐ Register socket
   useEffect(() => {
-    if (!socket || !fromID) return;
+    if (!socket || !fromEmail) return;
 
-    socket.emit("register", String(fromID));
-  }, [socket, fromID]);
+    socket.emit("register", String(fromEmail));
+  }, [socket, fromEmail]);
 
   // ⭐ Listen for private messages
   useEffect(() => {
@@ -45,13 +46,13 @@ const Main = ({ loading, userID, fromID, setLoading, setUserID }) => {
     return () => socket.off("privateMessage", handlePrivateMessage);
   }, [socket]);
 
-  const handleLocalSend = ({ toID, message }) => {
-    if (!fromID || !toID || !message?.trim()) return;
+  const handleLocalSend = ({ toEmail, message }) => {
+    if (!fromEmail || !toEmail || !message?.trim()) return;
     setMessages(prev => [
       ...prev,
       {
-        from: String(fromID),
-        to: String(toID),
+        from: String(fromEmail),
+        to: String(toEmail),
         text: message,
         timestamp: Date.now()
       }
@@ -60,26 +61,26 @@ const Main = ({ loading, userID, fromID, setLoading, setUserID }) => {
 
   // ⭐ Last message map
   useEffect(() => {
-    if (!fromID) return;
+    if (!fromEmail) return;
 
     const map = {};
     messages.forEach(msg => {
       const other =
-        msg.from === fromID ? msg.to :
-        msg.to === fromID ? msg.from :
+        msg.from === fromEmail ? msg.to :
+        msg.to === fromEmail ? msg.from :
         null;
 
       if (other) map[other] = msg.text;
     });
 
     setLastMessage(map);
-  }, [messages, fromID]);
+  }, [messages, fromEmail]);
 
   // ⭐ Filter chat view
   const filteredMessages = messages.filter(
     m =>
-      (m.from === fromID && m.to === contactPersonsID) ||
-      (m.from === contactPersonsID && m.to === fromID)
+      (m.from === fromEmail && m.to === contactPersonEmail) ||
+      (m.from === contactPersonEmail && m.to === fromEmail)
   );
 
   return (
@@ -91,8 +92,10 @@ const Main = ({ loading, userID, fromID, setLoading, setUserID }) => {
         userID={userID}
         contactPerson={contactPerson}
         setContactPerson={setContactPerson}
-        contactPersonsID={contactPersonsID}
-        setContactPersonsID={setContactPersonsID}
+        contactPersonId={contactPersonId}
+        setContactPersonId={setContactPersonId}
+        contactPersonEmail={contactPersonEmail}
+        setContactPersonEmail={setContactPersonEmail}
         selected={selected}
         lastMessage={lastMessage}
         setSelected={setSelected}
@@ -104,10 +107,12 @@ const Main = ({ loading, userID, fromID, setLoading, setUserID }) => {
       <Chat
         userID={userID}
         fromID={fromID}
+        fromEmail={fromEmail}
         contactPerson={contactPerson}
         selected={selected}
         setSelected={setSelected}
-        contactPersonsID={contactPersonsID}
+        contactPersonId={contactPersonId}
+        contactPersonEmail={contactPersonEmail}
         messages={filteredMessages}
         onLocalSend={handleLocalSend}
       />

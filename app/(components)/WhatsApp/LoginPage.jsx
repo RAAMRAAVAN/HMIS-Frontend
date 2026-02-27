@@ -2,7 +2,7 @@ import { Box, Button, TextField, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 import { getSocket } from "../../../utils/socket";
 
-const LoginPage = ({ userID, setUserID, setFromID }) => {
+const LoginPage = ({ userID, setUserID, setFromID, setFromEmail }) => {
   const [loginID, setLoginID] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,10 +39,12 @@ const LoginPage = ({ userID, setUserID, setFromID }) => {
 
       setUserID(data.user.name);
       setFromID(String(data.user.id));
+      setFromEmail(data.user.email);
 
       if (typeof window !== "undefined") {
         sessionStorage.setItem("userID", data.user.name);
         sessionStorage.setItem("fromID", String(data.user.id));
+        sessionStorage.setItem("fromEmail", data.user.email);
       }
 
 
@@ -56,9 +58,9 @@ const LoginPage = ({ userID, setUserID, setFromID }) => {
   useEffect(() => {
     if (userID != null) {
       const socket = getSocket();
-      const savedFromID = typeof window !== "undefined" ? sessionStorage.getItem("fromID") : null;
-      if (savedFromID) {
-        socket.emit("register", savedFromID);
+      const savedFromEmail = typeof window !== "undefined" ? sessionStorage.getItem("fromEmail") : null;
+      if (savedFromEmail) {
+        socket.emit("register", savedFromEmail);
       }
     }
   }, [userID]);
