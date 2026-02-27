@@ -1,0 +1,18 @@
+.KnowMoreContainer:hover .KnowMore{
+    color: #f04e30;
+    
+}
+
+.KnowMoreContainer:hover .ExpandButton {
+    right: -33;
+}
+
+.KnowMoreContainer{
+    position: relative;
+    cursor: pointer;
+}
+.ExpandButton {
+    position: absolute;
+    right: -25;
+    transition:ease-in-out 300ms;
+}

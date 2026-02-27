@@ -1,0 +1,108 @@
+import { Box, Button, TextField, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
+import { getSocket } from "../../../utils/socket";
+
+const LoginPage = ({ userID, setUserID, setFromID }) => {
+  const [loginID, setLoginID] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+
+
+  const handleLogin = async () => {
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000"}/api/users/login`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: loginID,
+          password
+        })
+      });
+
+      // console.log("Response status:", res.status);
+
+      const data = await res.json().catch(() => null);
+
+      // console.log("Response body:", data.user);
+
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.message || "Invalid login credentials");
+      }
+
+      // console.log("Response body:", data.user.name);
+
+      setUserID(data.user.name);
+      setFromID(String(data.user.id));
+
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("userID", data.user.name);
+        sessionStorage.setItem("fromID", String(data.user.id));
+      }
+
+
+    } catch (err) {
+      setError(err.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userID != null) {
+      const socket = getSocket();
+      const savedFromID = typeof window !== "undefined" ? sessionStorage.getItem("fromID") : null;
+      if (savedFromID) {
+        socket.emit("register", savedFromID);
+      }
+    }
+  }, [userID]);
+
+  return (
+    <Box display='flex' width='100%' height='100%' justifyContent='center' alignItems='center'>
+      <Box display='flex' flexDirection='column' width='500px' gap={1.5}>
+
+        <Typography textAlign='center' fontSize={22} fontWeight={600}>
+          WhatsApp Login
+        </Typography>
+
+        {error && (
+          <Typography color="error" fontSize={14}>
+            {error}
+          </Typography>
+        )}
+
+        <Typography>Enter User ID</Typography>
+        <TextField
+          value={loginID}
+          onChange={(e) => setLoginID(e.target.value)}
+          disabled={loading}
+        />
+
+        <Typography>Enter Password</Typography>
+        <TextField
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          disabled={loading}
+        />
+
+        <Button
+          variant="contained"
+          sx={{ marginTop: 1, backgroundColor: '#21c063' }}
+          onClick={handleLogin}
+          disabled={loading || !loginID || !password}
+        >
+          {loading ? "Logging in..." : "Login"}
+        </Button>
+      </Box>
+    </Box>
+  );
+};
+
+export default LoginPage;
