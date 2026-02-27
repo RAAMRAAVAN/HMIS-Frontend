@@ -19,12 +19,12 @@ const LeftSlider = () => {
     return (<>
         <Box
             display='flex'
-            width='4.2%'
-            // border='1px white solid'
+            width={{ sm: 72, md: 80, xl: 96 }}
+            minWidth={{ sm: 72, md: 80, xl: 96 }}
             alignItems='center'
             justifyContent='space-between'
             sx={{ backgroundColor: "#1d1f1f", flexDirection: 'column' }}
-            paddingY={2}
+            paddingY={{ sm: 1.5, md: 2, xl: 3 }}
         >
             <Box display='flex' flexDirection='column' alignItems='center'>
 

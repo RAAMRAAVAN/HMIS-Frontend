@@ -5,8 +5,9 @@ import SearchButton from "../SearchButton";
 import ContactsCard from "../ContactsCard";
 import { useEffect, useRef, useState } from "react";
 import FilterChips from "../ChipButtons";
+import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 
-const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, setSelected, lastMessage, unseenCounts, setContactPersonId, setContactPersonEmail, fromID, fromEmail }) => {
+const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, setSelected, lastMessage, unseenCounts, setContactPersonId, setContactPersonEmail, fromID, fromEmail, isMobile = false }) => {
 
   const [settings1, setSettings1] = useState(false);
   const dropdownRef = useRef(null);
@@ -20,8 +21,9 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
   // 🔹 Fetch users from API
   useEffect(() => {
     async function fetchUsers() {
+      const apiBaseUrl = getChatApiBaseUrl();
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000"}/api/users`, {
+        const res = await fetch(`${apiBaseUrl}/api/users`, {
           credentials: "include"
         });
         const data = await res.json();
@@ -62,12 +64,12 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
   return (
     <Box
       display='flex'
-      padding={2}
-      width='30%'
+      padding={{ xs: 1.5, md: 2, xl: 3 }}
+      width={isMobile ? '100%' : { sm: '42%', md: '36%', lg: '30%', xl: '26%' }}
       flexDirection='column'
       backgroundColor='#161717'
-      height='100vh'
-      sx={{ minHeight: 0 }}
+      height='100dvh'
+      sx={{ minHeight: 0, maxWidth: isMobile ? '100%' : { sm: 460, xl: 560 } }}
     >
 
       {/* Header */}
@@ -142,7 +144,7 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
 
         {/* USERS LIST */}
         {loading ? (
-          <Typography color="white" padding={2}>Loading...</Typography>
+          <Typography color="white" padding={2} fontSize={{ xs: 14, md: 16 }}>Loading...</Typography>
         ) : (
           users
             .filter(u => u.name !== userID)

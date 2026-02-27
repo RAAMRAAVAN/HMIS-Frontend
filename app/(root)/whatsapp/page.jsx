@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Box } from "@mui/material";
 import LoginPage from "../../(components)/WhatsApp/LoginPage";
 import { getSocket, disconnectSocket } from "@/utils/socket";
+import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 import Main from "../../(components)/WhatsApp/Main";
 
 const WhatsApp = () => {
@@ -17,9 +18,10 @@ const WhatsApp = () => {
   useEffect(() => {
 
     const checkLogin = async () => {
+      const apiBaseUrl = getChatApiBaseUrl();
 
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000"}/api/users/sessionLogin`, {
+        const res = await fetch(`${apiBaseUrl}/api/users/sessionLogin`, {
           credentials: "include"
         });
 

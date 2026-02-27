@@ -2,14 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Box, Divider } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import LeftSlider from "./LeftSlider";
 import Chats from "./Chats/Chats";
 import Chat from "./Chats/Chat/Chat";
 import { getSocket } from "@/utils/socket";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000";
+import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 
 const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => {
+  const API_BASE_URL = getChatApiBaseUrl();
   const [contactPerson, setContactPerson] = useState(null);
   const [contactPersonId, setContactPersonId] = useState(null);
   const [contactPersonEmail, setContactPersonEmail] = useState(null);
@@ -18,6 +20,9 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
   const [messages, setMessages] = useState([]);
   const [lastMessage, setLastMessage] = useState({});
   const [unseenCounts, setUnseenCounts] = useState({});
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const fromEmailRef = useRef(null);
   const contactEmailRef = useRef(null);
@@ -172,40 +177,55 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
   }, [socket]);
 
   return (
-    <Box display='flex' width='100%' height='100vh'>
-      <LeftSlider userID={userID} />
-      <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />
+    <Box display='flex' width='100%' height='100dvh' sx={{ minHeight: 0, backgroundColor: '#161717' }}>
+      {!isMobile && (
+        <>
+          <LeftSlider userID={userID} />
+          <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />
+        </>
+      )}
 
-      <Chats
-        userID={userID}
-        contactPerson={contactPerson}
-        setContactPerson={setContactPerson}
-        contactPersonId={contactPersonId}
-        setContactPersonId={setContactPersonId}
-        contactPersonEmail={contactPersonEmail}
-        setContactPersonEmail={setContactPersonEmail}
-        selected={selected}
-        lastMessage={lastMessage}
-        unseenCounts={unseenCounts}
-        setSelected={setSelected}
-        setUserID={setUserID}
-        fromID={fromID}
-        fromEmail={fromEmail}
-      />
+      {(!isMobile || !contactPersonEmail) && (
+        <Chats
+          userID={userID}
+          contactPerson={contactPerson}
+          setContactPerson={setContactPerson}
+          contactPersonId={contactPersonId}
+          setContactPersonId={setContactPersonId}
+          contactPersonEmail={contactPersonEmail}
+          setContactPersonEmail={setContactPersonEmail}
+          selected={selected}
+          lastMessage={lastMessage}
+          unseenCounts={unseenCounts}
+          setSelected={setSelected}
+          setUserID={setUserID}
+          fromID={fromID}
+          fromEmail={fromEmail}
+          isMobile={isMobile}
+        />
+      )}
 
-      <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />
+      {!isMobile && <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />}
 
-      <Chat
-        userID={userID}
-        fromID={fromID}
-        fromEmail={fromEmail}
-        contactPerson={contactPerson}
-        selected={selected}
-        setSelected={setSelected}
-        contactPersonId={contactPersonId}
-        contactPersonEmail={contactPersonEmail}
-        messages={messages}
-      />
+      {(!isMobile || !!contactPersonEmail) && (
+        <Chat
+          userID={userID}
+          fromID={fromID}
+          fromEmail={fromEmail}
+          contactPerson={contactPerson}
+          selected={selected}
+          setSelected={setSelected}
+          contactPersonId={contactPersonId}
+          contactPersonEmail={contactPersonEmail}
+          messages={messages}
+          isMobile={isMobile}
+          onBack={() => {
+            setContactPerson(null);
+            setContactPersonId(null);
+            setContactPersonEmail(null);
+          }}
+        />
+      )}
     </Box>
   );
 };

@@ -16,6 +16,7 @@ import {
   HttpsOutlined,
   LogoutOutlined
 } from '@mui/icons-material';
+import { getChatApiBaseUrl } from '@/utils/chatApiBase';
 
 const SettingsList = ({ onClose, setUserID, open = true }) => {
 
@@ -30,8 +31,9 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
   };
 
   const handleLogout = async () => {
+    const apiBaseUrl = getChatApiBaseUrl();
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000"}/api/users/logout`, {
+      await fetch(`${apiBaseUrl}/api/users/logout`, {
         method: "POST",
         credentials: "include"
       });

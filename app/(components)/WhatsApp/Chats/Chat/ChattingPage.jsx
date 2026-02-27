@@ -34,7 +34,7 @@ const ChattingPage = ({ userID, contactPerson, messages, contactPersonId, contac
           flex: 1,
           minHeight: 0,
           overflowY: "auto",
-          padding: 2,
+          padding: { xs: 1, sm: 1.5, md: 2, xl: 3 },
           scrollbarWidth: 'thin',
           scrollbarColor: '#2f3133 transparent',
           '&::-webkit-scrollbar': {
@@ -65,10 +65,11 @@ const ChattingPage = ({ userID, contactPerson, messages, contactPersonId, contac
               sx={{
                 backgroundColor: String(msg.from) === String(fromEmail) ? "#21c063" : "#292a2a",
                 color: String(msg.from) === String(fromEmail) ? "black" : "white",
-                padding: "8px 12px",
+                padding: { xs: "7px 10px", md: "8px 12px", xl: "12px 16px" },
                 borderRadius: "20px",
                 maxWidth: "70%",
                 wordBreak: "break-word",
+                fontSize: { xs: 13, md: 15, xl: 18 },
               }}
             >
               {msg.text}
@@ -85,8 +86,8 @@ const ChattingPage = ({ userID, contactPerson, messages, contactPersonId, contac
         sx={{
           borderTop: '1px solid #2b2b2b',
           backgroundColor: '#161717',
-          px: 1,
-          py: 0.5,
+          px: { xs: 0.5, md: 1, xl: 2 },
+          py: { xs: 0.25, md: 0.5, xl: 1 },
         }}
       >
         <SearchButton

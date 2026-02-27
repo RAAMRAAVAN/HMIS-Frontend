@@ -56,9 +56,9 @@ const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEma
       fullWidth
 
       sx={{
-        m: 1,
+        m: { xs: 0.5, md: 1 },
         '& .MuiOutlinedInput-root': {
-          borderRadius: '33px',
+          borderRadius: { xs: '24px', md: '33px' },
           backgroundColor: '#2e2f2f',
           '& .MuiOutlinedInput-notchedOutline': { borderColor: 'none' },
           '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
@@ -68,13 +68,13 @@ const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEma
         '& .MuiInputBase-input::placeholder': {
           color: '#cfcfcf',
           opacity: 0.8,
-          fontSize: 20
+          fontSize: { xs: 14, md: 18, xl: 22 }
         },
         '& .MuiInputBase-input': {
           color: '#ffffff',
-          paddingTop: '18px',
-          paddingBottom: '18px',
-          fontSize: 20
+          paddingTop: { xs: '10px', md: '16px', xl: '20px' },
+          paddingBottom: { xs: '10px', md: '16px', xl: '20px' },
+          fontSize: { xs: 14, md: 18, xl: 22 }
         },
       }}
 
@@ -83,11 +83,11 @@ const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEma
           startAdornment: (
             <InputAdornment position="start">
               <IconButton sx={{ '&:hover': { backgroundColor: '#292a2a' } }}>
-                <Add sx={{ color: 'white', fontSize: 35 }} />
+                <Add sx={{ color: 'white', fontSize: { xs: 24, md: 32, xl: 38 } }} />
               </IconButton>
 
               <IconButton sx={{ '&:hover': { backgroundColor: '#292a2a' } }}>
-                <AddReaction sx={{ color: 'white', fontSize: 35 }} />
+                <AddReaction sx={{ color: 'white', fontSize: { xs: 24, md: 32, xl: 38 } }} />
               </IconButton>
             </InputAdornment>
           ),
@@ -99,19 +99,19 @@ const SearchButton = ({ userID, contactPerson, contactPersonId, contactPersonEma
                 onClick={handleSend}
                 sx={{
                   backgroundColor: '#21c063',
-                  width: 50,
-                  height: 50,
+                  width: { xs: 40, md: 50, xl: 58 },
+                  height: { xs: 40, md: 50, xl: 58 },
                   right: -6,
                   '&:hover': { backgroundColor: '#21c063' }
                 }}
               >
-                <SendIcon sx={{ color: 'black', fontSize: 30 }} />
+                <SendIcon sx={{ color: 'black', fontSize: { xs: 22, md: 30, xl: 34 } }} />
               </IconButton>
             </InputAdornment>
           ) : (
             <Tooltip title="Voice" placement="right">
               <IconButton sx={{ '&:hover': { backgroundColor: '#21c063' } }}>
-                <MicNoneOutlined sx={{ color: 'white', fontSize: 35 }} />
+                <MicNoneOutlined sx={{ color: 'white', fontSize: { xs: 24, md: 32, xl: 38 } }} />
               </IconButton>
             </Tooltip>
           )

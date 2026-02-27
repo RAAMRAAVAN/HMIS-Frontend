@@ -1,12 +1,12 @@
 // utils/socket.js
 import { io } from "socket.io-client";
+import { getChatApiBaseUrl } from "./chatApiBase";
 
 let socket = null;
-const SOCKET_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000";
 
 export const getSocket = () => {
   if (!socket) {
-    socket = io(SOCKET_BASE_URL, {
+    socket = io(getChatApiBaseUrl(), {
       transports: ["websocket"],
       withCredentials: true
     });

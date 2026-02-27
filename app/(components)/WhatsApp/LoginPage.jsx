@@ -1,6 +1,7 @@
 import { Box, Button, TextField, Typography } from "@mui/material";
 import { useEffect, useState } from "react";
 import { getSocket } from "../../../utils/socket";
+import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 
 const LoginPage = ({ userID, setUserID, setFromID, setFromEmail }) => {
   const [loginID, setLoginID] = useState("");
@@ -11,11 +12,12 @@ const LoginPage = ({ userID, setUserID, setFromID, setFromEmail }) => {
 
 
   const handleLogin = async () => {
+    const apiBaseUrl = getChatApiBaseUrl();
     setError("");
     setLoading(true);
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000"}/api/users/login`, {
+      const res = await fetch(`${apiBaseUrl}/api/users/login`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
