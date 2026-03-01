@@ -1,9 +1,7 @@
-import { DataSaverOff, GroupsRounded, Margin, MarkUnreadChatAltRounded, SettingsRounded } from "@mui/icons-material";
+import { DataSaverOff, GroupsRounded, ManageAccountsRounded, MarkUnreadChatAltRounded, SettingsRounded } from "@mui/icons-material";
 import { Avatar, Box, IconButton, Tooltip } from "@mui/material";
-import { useState } from "react";
 
-const LeftSlider = () => {
-    const [selected, setSelected] = useState("Chats");
+const LeftSlider = ({ selected, onSelect, isAdmin }) => {
     
         const getButtonSx = (name) => ({
             marginTop: 1,
@@ -55,7 +53,7 @@ const LeftSlider = () => {
                 >
                     <IconButton
                         size="small"
-                        onClick={() => setSelected("Chats")}
+                        onClick={() => onSelect("Chats")}
                         sx={getButtonSx("Chats")}
                     >
                         <MarkUnreadChatAltRounded
@@ -92,7 +90,7 @@ const LeftSlider = () => {
                 >
                     <IconButton 
                         size="small"
-                        onClick={() => setSelected("Status")}
+                        onClick={() => onSelect("Status")}
                         sx={getButtonSx("Status")}
                     >
                         <DataSaverOff
@@ -129,7 +127,7 @@ const LeftSlider = () => {
                 >
                     <IconButton 
                         size="small"
-                        onClick={() => setSelected("Groups")}
+                        onClick={() => onSelect("Groups")}
                         sx={getButtonSx("Groups")}
                     >
                         <GroupsRounded
@@ -138,6 +136,44 @@ const LeftSlider = () => {
                         />
                     </IconButton>
                 </Tooltip>
+
+                {isAdmin ? (
+                    <Tooltip
+                        title="Manage Users"
+                        placement="right"
+                        slotProps={{
+                            tooltip: {
+                                sx: {
+                                    backgroundColor: "#ffffff",
+                                    color: "#000000",
+                                    fontSize: 14,
+                                    fontWeight: 500,
+                                    borderRadius: "8px",
+                                    boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
+                                }
+                            },
+                            popper: {
+                                modifiers: [
+                                    {
+                                        name: "offset",
+                                        options: { offset: [0, -8] },
+                                    },
+                                ],
+                            },
+                        }}
+                    >
+                        <IconButton
+                            size="small"
+                            onClick={() => onSelect("Users")}
+                            sx={getButtonSx("Users")}
+                        >
+                            <ManageAccountsRounded
+                                fontSize="inherit"
+                                sx={{ color: getIconColor("Users") }}
+                            />
+                        </IconButton>
+                    </Tooltip>
+                ) : null}
 
             </Box>
 
@@ -171,7 +207,7 @@ const LeftSlider = () => {
                 >
                     <IconButton 
                         size="small"
-                        onClick={() => setSelected("Settings")}
+                        onClick={() => onSelect("Settings")}
                         sx={getButtonSx("Settings")}
                     >
                         <SettingsRounded

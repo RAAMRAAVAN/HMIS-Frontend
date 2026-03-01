@@ -7,20 +7,24 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import LeftSlider from "./LeftSlider";
 import Chats from "./Chats/Chats";
 import Chat from "./Chats/Chat/Chat";
+import UserManagementPanel from "./Users/UserManagementPanel";
 import { getSocket } from "@/utils/socket";
 import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 import { toEpochMs } from "@/utils/chatTime";
 
-const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => {
+const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUserID }) => {
   const API_BASE_URL = getChatApiBaseUrl();
   const [contactPerson, setContactPerson] = useState(null);
   const [contactPersonId, setContactPersonId] = useState(null);
   const [contactPersonEmail, setContactPersonEmail] = useState(null);
+  const [contactPresence, setContactPresence] = useState({ isOnline: false, lastSeen: null });
   const [selected, setSelected] = useState("Chats");
 
   const [messages, setMessages] = useState([]);
   const [lastMessage, setLastMessage] = useState({});
   const [unseenCounts, setUnseenCounts] = useState({});
+  const [historyEmails, setHistoryEmails] = useState([]);
+  const [lastMessageAt, setLastMessageAt] = useState({});
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -29,6 +33,7 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
   const contactEmailRef = useRef(null);
 
   const socket = getSocket();
+  const isAdminUser = String(userRole || "").toLowerCase() === "admin";
 
   useEffect(() => {
     fromEmailRef.current = fromEmail ? String(fromEmail).toLowerCase() : null;
@@ -64,6 +69,9 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
   useEffect(() => {
     if (!fromID) return;
 
+    let stopped = false;
+    let timerId;
+
     const fetchChatOverview = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/users/chat-overview`, {
@@ -76,24 +84,60 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
         const list = data?.data || [];
 
         const lastMap = {};
+        const lastAtMap = {};
         const unseenMap = {};
+        const historyList = [];
 
         list.forEach((item) => {
           const emailKey = String(item.email || "").toLowerCase();
           if (!emailKey) return;
 
+          historyList.push(emailKey);
           lastMap[emailKey] = item.last_message || "";
+          lastAtMap[emailKey] = Number(item.last_message_at_ms || 0) || 0;
           unseenMap[emailKey] = Number(item.unseen_count || 0);
         });
 
-        setLastMessage(lastMap);
-        setUnseenCounts(unseenMap);
+        if (!stopped) {
+          setHistoryEmails(historyList);
+          setLastMessage(lastMap);
+          setLastMessageAt(lastAtMap);
+          setUnseenCounts(unseenMap);
+        }
       } catch (error) {
         console.error("Failed to fetch chat overview", error);
       }
     };
 
     fetchChatOverview();
+
+    const scheduleNext = () => {
+      if (stopped) return;
+      const isHidden = typeof document !== "undefined" && document.hidden;
+      const delay = isHidden ? 120000 : 45000;
+
+      timerId = setTimeout(async () => {
+        if (stopped) return;
+        await fetchChatOverview();
+        scheduleNext();
+      }, delay);
+    };
+
+    const handleVisibilityChange = async () => {
+      if (typeof document === "undefined") return;
+      if (!document.hidden) {
+        await fetchChatOverview();
+      }
+    };
+
+    scheduleNext();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopped = true;
+      if (timerId) clearTimeout(timerId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [fromID]);
 
   useEffect(() => {
@@ -189,10 +233,16 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
       }
 
       const otherEmail = from === currentFromEmail ? to : from;
+      const messageTime = toEpochMs(payload.timestampMs ?? payload.createdAtMs ?? payload.timestamp ?? payload.createdAt) || Date.now();
       setLastMessage((prev) => ({
         ...prev,
         [otherEmail]: text,
       }));
+      setLastMessageAt((prev) => ({
+        ...prev,
+        [otherEmail]: messageTime,
+      }));
+      setHistoryEmails((prev) => [otherEmail, ...prev.filter((email) => email !== otherEmail)]);
 
       if (to === currentFromEmail && from !== currentFromEmail && from !== currentContactEmail) {
         setUnseenCounts((prev) => ({
@@ -235,12 +285,14 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
     <Box display='flex' width='100%' height='100dvh' sx={{ minHeight: 0, backgroundColor: '#161717' }}>
       {!isMobile && (
         <>
-          <LeftSlider userID={userID} />
+          <LeftSlider userID={userID} selected={selected} onSelect={setSelected} isAdmin={isAdminUser} />
           <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />
         </>
       )}
 
-      {(!isMobile || !contactPersonEmail) && (
+      {isAdminUser && selected === "Users" ? (
+        <UserManagementPanel />
+      ) : (!isMobile || !contactPersonEmail) ? (
         <Chats
           userID={userID}
           contactPerson={contactPerson}
@@ -249,20 +301,23 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
           setContactPersonId={setContactPersonId}
           contactPersonEmail={contactPersonEmail}
           setContactPersonEmail={setContactPersonEmail}
+          setContactPresence={setContactPresence}
           selected={selected}
           lastMessage={lastMessage}
+          lastMessageAt={lastMessageAt}
           unseenCounts={unseenCounts}
+          historyEmails={historyEmails}
           setSelected={setSelected}
           setUserID={setUserID}
           fromID={fromID}
           fromEmail={fromEmail}
           isMobile={isMobile}
         />
-      )}
+      ) : null}
 
-      {!isMobile && <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />}
+      {!isMobile && selected !== "Users" && <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />}
 
-      {(!isMobile || !!contactPersonEmail) && (
+      {selected !== "Users" && (!isMobile || !!contactPersonEmail) && (
         <Chat
           userID={userID}
           fromID={fromID}
@@ -272,6 +327,8 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
           setSelected={setSelected}
           contactPersonId={contactPersonId}
           contactPersonEmail={contactPersonEmail}
+          contactIsOnline={Boolean(contactPresence?.isOnline)}
+          contactLastSeen={contactPresence?.lastSeen || null}
           messages={messages}
           isMobile={isMobile}
           onBack={() => {

@@ -8,7 +8,7 @@ import FilterChips from "../ChipButtons";
 import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 import { getSocket } from "@/utils/socket";
 
-const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, setSelected, lastMessage, unseenCounts, setContactPersonId, setContactPersonEmail, fromID, fromEmail, isMobile = false }) => {
+const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, setSelected, lastMessage, lastMessageAt = {}, unseenCounts, historyEmails = [], setContactPersonId, setContactPersonEmail, setContactPresence, fromID, fromEmail, isMobile = false }) => {
 
   const [settings1, setSettings1] = useState(false);
   const dropdownRef = useRef(null);
@@ -16,10 +16,26 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const socket = getSocket();
   const fetchUsersRef = useRef(async () => {});
 
   const youLabel = `${userID}  (You)`;
+  const normalizedHistoryEmails = new Set((historyEmails || []).map((email) => String(email || "").toLowerCase()));
+  const historyOrderMap = new Map((historyEmails || []).map((email, index) => [String(email || "").toLowerCase(), index]));
+
+  const applySelection = (user) => {
+    if (!user?.id || !user?.email) return;
+    setContactPerson(user.name);
+    setContactPersonId(String(user.id));
+    setContactPersonEmail(String(user.email).toLowerCase());
+    setContactPresence?.({
+      isOnline: Boolean(user.is_online),
+      lastSeen: user.last_seen || null,
+    });
+  };
 
   // 🔹 Fetch users from API
   useEffect(() => {
@@ -102,6 +118,23 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
           };
         })
       );
+
+      setSuggestions((prev) =>
+        prev.map((user) => {
+          const email = String(user.email || "").toLowerCase();
+          const name = String(user.name || "").toLowerCase();
+
+          if (email !== identifier && name !== identifier) {
+            return user;
+          }
+
+          return {
+            ...user,
+            is_online: Boolean(payload?.isOnline),
+            last_seen: payload?.isOnline ? user.last_seen : (payload?.lastSeen || user.last_seen),
+          };
+        })
+      );
     };
 
     socket.on("presenceUpdate", handlePresenceUpdate);
@@ -109,6 +142,71 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
       socket.off("presenceUpdate", handlePresenceUpdate);
     };
   }, [socket]);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSuggestions([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    const apiBaseUrl = getChatApiBaseUrl();
+    const controller = new AbortController();
+
+    const fetchSuggestions = async () => {
+      try {
+        setSearchLoading(true);
+        const res = await fetch(
+          `${apiBaseUrl}/api/users/chat-suggestions?q=${encodeURIComponent(query)}`,
+          {
+            credentials: "include",
+            signal: controller.signal,
+          }
+        );
+
+        if (!res.ok) {
+          setSuggestions([]);
+          return;
+        }
+
+        const data = await res.json();
+        setSuggestions(data?.data || []);
+      } catch (error) {
+        if (error?.name !== "AbortError") {
+          console.error("Failed to fetch chat suggestions", error);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setSearchLoading(false);
+        }
+      }
+    };
+
+    fetchSuggestions();
+
+    return () => {
+      controller.abort();
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!contactPerson || contactPerson === userID) {
+      setContactPresence?.({ isOnline: true, lastSeen: null });
+      return;
+    }
+
+    const matchedUser = users.find((user) => user.name === contactPerson);
+    if (!matchedUser) {
+      setContactPresence?.({ isOnline: false, lastSeen: null });
+      return;
+    }
+
+    setContactPresence?.({
+      isOnline: Boolean(matchedUser.is_online),
+      lastSeen: matchedUser.last_seen || null,
+    });
+  }, [contactPerson, userID, users, setContactPresence]);
 
   // 🔹 Close settings dropdown on outside click
   useEffect(() => {
@@ -132,6 +230,33 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
     backgroundColor: selected === name ? "#292a2a" : "transparent",
     "&:hover": { backgroundColor: "#292a2a" }
   });
+
+  const defaultVisibleUsers = users
+    .filter((user) => {
+    const emailKey = String(user.email || "").toLowerCase();
+    const isSelf = String(user.name || "") === String(userID || "");
+    return !isSelf && normalizedHistoryEmails.has(emailKey);
+  })
+    .sort((a, b) => {
+      const emailA = String(a.email || "").toLowerCase();
+      const emailB = String(b.email || "").toLowerCase();
+
+      const lastAtA = Number(lastMessageAt?.[emailA] || 0);
+      const lastAtB = Number(lastMessageAt?.[emailB] || 0);
+      if (lastAtB !== lastAtA) {
+        return lastAtB - lastAtA;
+      }
+
+      const orderA = historyOrderMap.has(emailA) ? historyOrderMap.get(emailA) : Number.MAX_SAFE_INTEGER;
+      const orderB = historyOrderMap.has(emailB) ? historyOrderMap.get(emailB) : Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+
+  const visibleUsers = searchQuery.trim() ? suggestions : defaultVisibleUsers;
 
   return (
     <Box
@@ -170,7 +295,12 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
 
       {/* Search */}
       <Box width="96%">
-        <SearchButton />
+        <SearchButton
+          value={searchQuery}
+          onChange={setSearchQuery}
+          onClear={() => setSuggestions([])}
+          placeholder="Search or start a new chat"
+        />
       </Box>
 
       <Box width="100%" padding={1}>
@@ -200,29 +330,47 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
           },
         }}
       >
-        {/* YOU */}
-        <Box
-          width="100%"
-          padding={1}
-          sx={{ cursor: 'pointer' }}
-          onClick={() => {
-            setContactPerson(userID);
-            setContactPersonId(String(fromID));
-            setContactPersonEmail(String(fromEmail || "").toLowerCase());
-          }}
-        >
-          <ContactsCard userID={youLabel} ID={1} selectionStatus={contactPerson === userID} isOnline={true} />
-        </Box>
-
         {/* USERS LIST */}
         {loading ? (
           <Typography color="white" padding={2} fontSize={{ xs: 14, md: 16 }}>Loading...</Typography>
+        ) : searchQuery.trim() && searchLoading ? (
+          <Typography color="#bfbfbf" padding={2} fontSize={{ xs: 13, md: 14 }}>Searching...</Typography>
+        ) : visibleUsers.length === 0 ? (
+          <Typography color="#bfbfbf" padding={2} fontSize={{ xs: 13, md: 14 }}>
+            {searchQuery.trim() ? "No users found" : "No chats yet. Search to start a new chat."}
+          </Typography>
         ) : (
-          users
-            .filter(u => u.name !== userID)
-            .map(user => {
+          <>
+            {!searchQuery.trim() ? (
+              <Box
+                width="100%"
+                padding={1}
+                sx={{ cursor: 'pointer' }}
+                onClick={() => {
+                  setContactPerson(userID);
+                  setContactPersonId(String(fromID));
+                  setContactPersonEmail(String(fromEmail || "").toLowerCase());
+                  setContactPresence?.({ isOnline: true, lastSeen: null });
+                }}
+              >
+                <ContactsCard
+                  userID={youLabel}
+                  ID={String(fromID)}
+                  selectionStatus={contactPerson === userID}
+                  isOnline={true}
+                  lastMessage={lastMessage?.[String(fromEmail || "").toLowerCase()] || ""}
+                  unseenCount={0}
+                  lastSeen={null}
+                />
+              </Box>
+            ) : null}
 
-              const userLastMessage = lastMessage?.[String(user.email).toLowerCase()] || "";
+          {visibleUsers.map(user => {
+
+              const userLastMessage =
+                lastMessage?.[String(user.email).toLowerCase()] ||
+                user.last_message ||
+                "";
               const unseenCount = unseenCounts?.[String(user.email).toLowerCase()] || 0;
 
               return (
@@ -231,11 +379,7 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
                   width="100%"
                   padding={1}
                   sx={{ cursor: 'pointer' }}
-                  onClick={() => {
-                    setContactPerson(user.name);
-                    setContactPersonId(String(user.id));
-                    setContactPersonEmail(String(user.email).toLowerCase());
-                  }}
+                  onClick={() => applySelection(user)}
                 >
                   <ContactsCard
                     userID={user.name}
@@ -248,7 +392,8 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
                   />
                 </Box>
               );
-            })
+            })}
+          </>
         )}
       </Box>
 

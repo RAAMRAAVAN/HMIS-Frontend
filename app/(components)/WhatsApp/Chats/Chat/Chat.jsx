@@ -2,7 +2,7 @@ import { Box } from "@mui/material";
 import ChatNavbar from "./Navbar";
 import ChattingPage from "./ChattingPage";
 
-const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonEmail, fromID, fromEmail, isMobile = false, onBack }) => {
+const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonEmail, fromID, fromEmail, contactIsOnline = false, contactLastSeen = null, isMobile = false, onBack }) => {
     return (<>
 
         <Box
@@ -12,7 +12,14 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             sx={{ minHeight: 0, flex: 1 }}
         >
             <Box display='flex' width='100%' flexDirection='column' sx={{ minHeight: 0 }}>
-                <ChatNavbar contactPerson={contactPerson} userID={userID} showBack={isMobile} onBack={onBack} />
+                <ChatNavbar
+                    contactPerson={contactPerson}
+                    userID={userID}
+                    isOnline={contactIsOnline}
+                    lastSeen={contactLastSeen}
+                    showBack={isMobile}
+                    onBack={onBack}
+                />
                 <ChattingPage
                     userID={userID}
                     contactPerson={contactPerson}

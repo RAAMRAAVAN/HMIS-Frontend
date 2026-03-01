@@ -3,14 +3,27 @@ import { useState, useRef } from "react";
 import { SearchOutlined, Close } from "@mui/icons-material";
 import { InputAdornment, TextField, IconButton } from "@mui/material";
 
-const SearchButton = () => {
-  const [value, setValue] = useState("");
+const SearchButton = ({ value, onChange, onClear, placeholder = "Search or start a new chat" }) => {
+  const [internalValue, setInternalValue] = useState("");
   const [focused, setFocused] = useState(false);
 
   const inputRef = useRef(null);
+  const isControlled = typeof value === "string";
+  const currentValue = isControlled ? value : internalValue;
+
+  const handleValueChange = (nextValue) => {
+    if (!isControlled) {
+      setInternalValue(nextValue);
+    }
+    onChange?.(nextValue);
+  };
 
   const handleClear = () => {
-    setValue("");
+    if (!isControlled) {
+      setInternalValue("");
+    }
+    onClear?.();
+    onChange?.("");
     setFocused(false);
     inputRef.current?.blur();   // 👈 remove focus
   };
@@ -18,11 +31,11 @@ const SearchButton = () => {
   return (
     <TextField
       inputRef={inputRef}   // 👈 attach ref
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
+      value={currentValue}
+      onChange={(e) => handleValueChange(e.target.value)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
-      placeholder="Search or start a new chat"
+      placeholder={placeholder}
       id="outlined-start-adornment"
       fullWidth
       sx={{
@@ -60,7 +73,7 @@ const SearchButton = () => {
             </InputAdornment>
           ),
           endAdornment: (
-            focused && (
+            focused && currentValue && (
               <InputAdornment position="end">
                 <IconButton
                   size="small"

@@ -9,8 +9,10 @@ import Tooltip from '@mui/material/Tooltip';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { formatLastSeenLabel } from '@/utils/chatTime';
 
-function ChatNavbar({userID, contactPerson, showBack = false, onBack}) {
+function ChatNavbar({userID, contactPerson, isOnline = false, lastSeen = null, showBack = false, onBack}) {
+  const presenceText = formatLastSeenLabel({ isOnline, lastSeen }) || '';
 
   return (
     <AppBar position="static" sx={{ backgroundColor: '#161717', justifyContent:'center', paddingY: { xs: 0.5, md: 1 } }}>
@@ -38,9 +40,11 @@ function ChatNavbar({userID, contactPerson, showBack = false, onBack}) {
             <Typography sx={{ fontWeight: 700, fontSize:{ xs: 16, md: 19, xl: 22 } }}>
               {contactPerson}
             </Typography>
-            <Typography sx={{ fontSize: { xs: 12, md: 15, xl: 17 }, color: '#bfbfbf', fontWeight:600 }}>
-              Message yourself
-            </Typography>
+            {presenceText ? (
+              <Typography sx={{ fontSize: { xs: 12, md: 15, xl: 17 }, color: '#bfbfbf', fontWeight:600 }}>
+                {presenceText}
+              </Typography>
+            ) : null}
           </Box>
         </Box>
 
