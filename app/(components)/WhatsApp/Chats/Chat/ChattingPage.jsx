@@ -7,34 +7,16 @@ import DoneAllIcon from "@mui/icons-material/DoneAll";
 // import { useEffect, useState } from "react";
 import SearchButton from "./SendMessage";
 import { getChatApiBaseUrl } from "@/utils/chatApiBase";
+import { formatChatBubbleDateTime } from "@/utils/chatTime";
 // import { getSocket } from "../../../../../utils/socket";
 
 const ChattingPage = ({ userID, contactPerson, messages, contactPersonId, contactPersonEmail, fromID, fromEmail }) => {
   const bottomRef = useRef(null);
   const apiBase = getChatApiBaseUrl();
   const currentFrom = String(fromEmail || "").toLowerCase();
-  const DISPLAY_TIMEZONE = "Asia/Kolkata";
 
   const formatMessageDateTime = (timestamp) => {
-    const date = new Date(timestamp || Date.now());
-    const isInvalidDate = Number.isNaN(date.getTime());
-    const resolvedDate = isInvalidDate ? new Date() : date;
-
-    const time = resolvedDate.toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-      timeZone: DISPLAY_TIMEZONE,
-    });
-
-    const day = resolvedDate.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      timeZone: DISPLAY_TIMEZONE,
-    });
-
-    return { time, day };
+    return formatChatBubbleDateTime(timestamp);
   };
 
   const renderStatusIcon = (status) => {

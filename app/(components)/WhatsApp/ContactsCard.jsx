@@ -2,58 +2,7 @@ import { useRef, useState } from "react";
 import { KeyboardArrowDown } from "@mui/icons-material";
 import { Avatar, Box, ClickAwayListener, IconButton, Popper, Typography } from "@mui/material";
 import SettingsList from "./Chats/Settings1.jsx/SettingsList";
-
-const IST_TIMEZONE = "Asia/Kolkata";
-
-function getISTDateKey(date) {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-        timeZone: IST_TIMEZONE,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-    }).formatToParts(date);
-
-    const year = parts.find((part) => part.type === "year")?.value;
-    const month = parts.find((part) => part.type === "month")?.value;
-    const day = parts.find((part) => part.type === "day")?.value;
-
-    if (!year || !month || !day) return "";
-    return `${year}-${month}-${day}`;
-}
-
-function formatLastSeenLabel({ isOnline, lastSeen }) {
-    if (isOnline) return "Online";
-    if (!lastSeen) return "";
-
-    const seenDate = new Date(lastSeen);
-    if (Number.isNaN(seenDate.getTime())) return "";
-
-    const now = new Date();
-    const todayKey = getISTDateKey(now);
-    const seenKey = getISTDateKey(seenDate);
-
-    const todayDate = new Date(`${todayKey}T00:00:00Z`);
-    const seenDateOnly = new Date(`${seenKey}T00:00:00Z`);
-    const dayDiff = Math.round((todayDate - seenDateOnly) / (1000 * 60 * 60 * 24));
-
-    const timeText = seenDate.toLocaleTimeString("en-IN", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-        timeZone: IST_TIMEZONE,
-    });
-
-    if (dayDiff === 0) return `${timeText}`;
-    if (dayDiff === 1) return `yesterday at ${timeText}`;
-
-    const dateText = seenDate.toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        timeZone: IST_TIMEZONE,
-    });
-    return `${dateText}`;
-}
+import { formatLastSeenLabel } from "@/utils/chatTime";
 
 const ContactsCard = ({ userID,ID, selectionStatus, lastMessage, unseenCount = 0, isOnline = false, lastSeen = null }) => {
     const showUnread = unseenCount > 0 && !selectionStatus;

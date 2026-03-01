@@ -9,6 +9,7 @@ import Chats from "./Chats/Chats";
 import Chat from "./Chats/Chat/Chat";
 import { getSocket } from "@/utils/socket";
 import { getChatApiBaseUrl } from "@/utils/chatApiBase";
+import { toEpochMs } from "@/utils/chatTime";
 
 const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => {
   const API_BASE_URL = getChatApiBaseUrl();
@@ -113,7 +114,11 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
         }
 
         const data = await res.json();
-        setMessages(data?.data || []);
+        const normalizedMessages = (data?.data || []).map((message) => ({
+          ...message,
+          timestamp: toEpochMs(message.timestampMs ?? message.timestamp ?? message.createdAtMs ?? message.createdAt),
+        }));
+        setMessages(normalizedMessages);
 
         await fetch(`${API_BASE_URL}/api/users/chat-read/${contactPersonId}`, {
           method: "POST",
@@ -154,7 +159,7 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
         text,
         messageType: payload.messageType || "text",
         file: payload.file || null,
-        timestamp: payload.createdAtMs ?? payload.timestamp ?? payload.createdAt ?? Date.now(),
+        timestamp: toEpochMs(payload.timestampMs ?? payload.createdAtMs ?? payload.timestamp ?? payload.createdAt),
       };
 
       const isActiveConversation =
