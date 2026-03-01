@@ -8,8 +8,9 @@ import { useState } from "react";
 import OTInput from "./OTInput";
 import OTStatusCheckboxes from "./OTStatusCheckboxes";
 import GenderAutocomplete from "./GenderAutocomplete";
+import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = getChatApiBaseUrl();
 
 /* ------------------------------------------------------ */
 /* 🔹 VALIDATION HELPERS                                  */

@@ -4,6 +4,20 @@ Date: 2026-02-27
 ============================================================
 WHEN TO USE THIS
 ============================================================
+Fastest option (one command from WSL):
+   cd ~/hmis-nextjs
+   npm run lan:up
+
+This command automatically:
+- Detects Windows LAN IP (for phone/device URL)
+- Detects WSL IP (for forwarding target)
+- Updates .env.local (NEXT_PUBLIC_LAN_IP)
+- Regenerates HTTPS certs
+- Attempts Windows portproxy/firewall refresh
+- Starts backend + frontend + HTTPS gateway
+
+If Windows networking refresh needs admin rights, command output will print one PowerShell (Admin) command to run once.
+
 Use these steps whenever:
 1) You changed Wi-Fi network, or
 2) Your Windows LAN IP changed, or
@@ -30,9 +44,11 @@ STEP 2: REGENERATE HTTPS CERT FOR NEW LAN_IP
 ============================================================
 In WSL:
    cd ~/hmis-nextjs
+   npm run lan:set -- LAN_IP
    bash ./scripts/setup-lan-https.sh LAN_IP
 
 Example:
+   npm run lan:set -- 10.153.0.41
    bash ./scripts/setup-lan-https.sh 10.153.0.41
 
 This creates/updates certs in:
@@ -87,7 +103,7 @@ Open:
    https://LAN_IP:3443
 
 Example:
-   https://10.153.0.41:3443
+   https://LAN_IP:3443
 
 If certificate warning appears:
 - Install/trust CA file from:
@@ -99,10 +115,13 @@ OPTIONAL: ENV CHECK FOR CHAT API
 File:
    ~/hmis-nextjs/.env.local
 
-Current LAN value:
-   NEXT_PUBLIC_CHAT_API_BASE_URL=http://LAN_IP:5000
+Single place to edit:
+   NEXT_PUBLIC_LAN_IP=LAN_IP
 
-If this points to old tunnel/old IP, update it and restart Next.js.
+Or use command:
+   npm run lan:set -- LAN_IP
+
+After updating this, restart Next.js and backend.
 
 ============================================================
 DIFFERENT NETWORK (NOT SAME LAN)
@@ -132,3 +151,10 @@ If local works but phone does not:
 - Portproxy likely points to old WSL_IP, OR
 - Firewall rules missing, OR
 - Phone not on same Wi-Fi.
+
+PowerShell (Admin) helper command:
+1) In WSL, get current WSL_IP:
+   hostname -I | awk '{print $1}'
+
+2) In Windows PowerShell (Admin), run with that WSL_IP:
+   powershell -ExecutionPolicy Bypass -File "\\wsl.localhost\Ubuntu-22.04\home\hmis\hmis-nextjs\scripts\setup-windows-portproxy.ps1" -WslIp "WSL_IP"

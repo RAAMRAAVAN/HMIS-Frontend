@@ -3,9 +3,10 @@
 import { useEffect, useState } from 'react';
 import io from "socket.io-client";
 import { Grid, Card, CardContent, Typography, Box, Chip, Divider, Stack } from '@mui/material';
+import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 
 console.log("🟢 LIVE OT DASHBOARD FILE LOADED");
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = getChatApiBaseUrl();
 
 // ⚠️ Create socket lazily to avoid duplicate connections
 let socket;

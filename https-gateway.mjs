@@ -31,10 +31,23 @@ const backendProxy = httpProxy.createProxyServer({
 
 const proxyErrorHandler = (label, req, res, error) => {
   console.error(`❌ ${label} proxy error:`, error.message);
-  if (!res.headersSent) {
-    res.writeHead(502, { "Content-Type": "application/json" });
+
+  if (res && typeof res.writeHead === "function") {
+    if (!res.headersSent) {
+      res.writeHead(502, { "Content-Type": "application/json" });
+    }
+
+    res.end(JSON.stringify({ success: false, message: `${label} proxy failed` }));
+    return;
   }
-  res.end(JSON.stringify({ success: false, message: `${label} proxy failed` }));
+
+  if (res && typeof res.write === "function") {
+    res.write("HTTP/1.1 502 Bad Gateway\r\n\r\n");
+  }
+
+  if (res && typeof res.end === "function") {
+    res.end();
+  }
 };
 
 frontendProxy.on("error", (error, req, res) => proxyErrorHandler("Frontend", req, res, error));

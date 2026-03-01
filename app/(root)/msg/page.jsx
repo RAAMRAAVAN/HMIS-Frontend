@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
+import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = getChatApiBaseUrl();
 const socket = io(API_BASE_URL);
 
 export default function Home() {

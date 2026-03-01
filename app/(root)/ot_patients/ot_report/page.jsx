@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { convertToISTDate, convertTo12HourFormat } from '../ot_entry/OTEntry';
 import { exportToExcel } from "./exportToExcel";
 import { Download } from "@mui/icons-material";
+import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = getChatApiBaseUrl();
 
 const OTReport = () => {
     const [otRooms, setOtRooms] = useState([]);

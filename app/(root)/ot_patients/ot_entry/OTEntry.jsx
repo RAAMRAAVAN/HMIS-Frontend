@@ -5,8 +5,9 @@ import { useEffect, useState } from "react";
 import OTFormOccupied from "./OTFormOccupied";
 import OTFormNew from "./OTFormNew";
 import OTStatusCheckboxes from "./OTStatusCheckboxes";
+import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = getChatApiBaseUrl();
 
 export function convertToISTDate(inputDate) {
     const date = new Date(inputDate);

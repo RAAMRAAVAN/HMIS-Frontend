@@ -3,8 +3,9 @@ import { Box, Button, Grid, Typography } from "@mui/material";
 import OTEntry from "./OTEntry";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_CHAT_API_BASE_URL || "http://localhost:5000";
+const API_BASE_URL = getChatApiBaseUrl();
 
 const OTEntryPage = () => {
     const [otRooms, setOtRooms] = useState([]);

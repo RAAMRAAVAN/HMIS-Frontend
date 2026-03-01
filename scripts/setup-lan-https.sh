@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LAN_IP="${1:-10.153.0.41}"
+LAN_IP="${1:-}"
 CERT_DIR="$(cd "$(dirname "$0")/.." && pwd)/certs"
+
+if [[ -z "$LAN_IP" ]]; then
+  ENV_FILE="$(cd "$(dirname "$0")/.." && pwd)/.env.local"
+  if [[ -f "$ENV_FILE" ]]; then
+    LAN_IP="$(grep -E '^NEXT_PUBLIC_LAN_IP=' "$ENV_FILE" | tail -n 1 | cut -d'=' -f2- | tr -d '[:space:]')"
+  fi
+fi
+
+if [[ -z "$LAN_IP" ]]; then
+  LAN_IP="127.0.0.1"
+  echo "⚠️ NEXT_PUBLIC_LAN_IP not found in .env.local. Falling back to $LAN_IP"
+fi
 
 mkdir -p "$CERT_DIR"
 
