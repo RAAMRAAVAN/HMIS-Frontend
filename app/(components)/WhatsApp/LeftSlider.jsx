@@ -19,8 +19,8 @@ const LeftSlider = () => {
     return (<>
         <Box
             display='flex'
-            width={{ sm: 72, md: 80, xl: 96 }}
-            minWidth={{ sm: 72, md: 80, xl: 96 }}
+            width={{ sm: 72, md: 80, xl: 60 }}
+            minWidth={{ sm: 72, md: 80, xl: 60 }}
             alignItems='center'
             justifyContent='space-between'
             sx={{ backgroundColor: "#1d1f1f", flexDirection: 'column' }}
@@ -54,7 +54,7 @@ const LeftSlider = () => {
                     }}
                 >
                     <IconButton
-                        size="large"
+                        size="small"
                         onClick={() => setSelected("Chats")}
                         sx={getButtonSx("Chats")}
                     >
@@ -91,7 +91,7 @@ const LeftSlider = () => {
                     }}
                 >
                     <IconButton 
-                        size="large"
+                        size="small"
                         onClick={() => setSelected("Status")}
                         sx={getButtonSx("Status")}
                     >
@@ -128,7 +128,7 @@ const LeftSlider = () => {
                     }}
                 >
                     <IconButton 
-                        size="large"
+                        size="small"
                         onClick={() => setSelected("Groups")}
                         sx={getButtonSx("Groups")}
                     >
@@ -170,7 +170,7 @@ const LeftSlider = () => {
                     }}
                 >
                     <IconButton 
-                        size="large"
+                        size="small"
                         onClick={() => setSelected("Settings")}
                         sx={getButtonSx("Settings")}
                     >

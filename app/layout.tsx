@@ -7,6 +7,8 @@ import { createTheme, CssBaseline, ThemeProvider } from '@mui/material';
 
 const theme = createTheme({
   typography: {
+    htmlFontSize: 14,
+    fontSize: 13,
     fontFamily: `'Montserrat', 'Roboto', 'Helvetica', 'Arial', sans-serif`,
   },
 });

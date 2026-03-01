@@ -3,6 +3,11 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --ui-scale: 0.9;
+}
+
+html {
+  font-size: calc(16px * var(--ui-scale));
 }
 
 @theme inline {

@@ -17,7 +17,6 @@ import {
   LogoutOutlined
 } from '@mui/icons-material';
 import { getChatApiBaseUrl } from '@/utils/chatApiBase';
-import { disconnectSocket } from '@/utils/socket';
 
 const SettingsList = ({ onClose, setUserID, open = true }) => {
 
@@ -38,8 +37,6 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
         method: "POST",
         credentials: "include"
       });
-
-      disconnectSocket();
 
       // Clear session + state
       if (typeof window !== "undefined") {

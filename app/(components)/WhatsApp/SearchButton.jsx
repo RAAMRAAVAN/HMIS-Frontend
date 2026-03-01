@@ -22,7 +22,7 @@ const SearchButton = () => {
       onChange={(e) => setValue(e.target.value)}
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
-      placeholder="Search for Person"
+      placeholder="Search or start a new chat"
       id="outlined-start-adornment"
       fullWidth
       sx={{
@@ -43,7 +43,7 @@ const SearchButton = () => {
         '& .MuiInputBase-input::placeholder': {
           color: '#cfcfcf',
           opacity: 0.8,
-          fontSize: 20
+          fontSize: 15
         },
 
         '& .MuiInputBase-input': {

@@ -19,9 +19,9 @@ const FilterChips = () => {
                     sx={{
                         height: 34,                         // ← fixed chip height
                         lineHeight: "34px",                 // ← centers text vertically
-                        padding: "0 3px",
+                        padding: "0 1px",
                         fontWeight: 600,
-                        fontSize: 17,
+                        fontSize: "0.8rem",
                         color: selected === item ? "#ffffff" : "#bfbfbf",
                         backgroundColor: selected === item ? "#103529" : "transparent",
                         border: selected === item
@@ -29,7 +29,15 @@ const FilterChips = () => {
                             : "1px solid rgba(200,200,200,0.4)",
 
                         // 🔥 vertical padding here
-                        '& .MuiChip-label': {
+                        '& .MuiChip-label, & .MuiChip-labelMedium': {
+                            fontSize: "0.85rem",
+                            fontWeight: 700,
+                            lineHeight: 1,
+                            display: "inline-block",
+                            transform: "scale(0.92, 1.25)",
+                            transformOrigin: "center",
+                            px: 2,
+                            py: 0,
                         },
 
                         "&:hover": {

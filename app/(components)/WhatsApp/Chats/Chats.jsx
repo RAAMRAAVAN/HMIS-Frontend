@@ -6,6 +6,7 @@ import ContactsCard from "../ContactsCard";
 import { useEffect, useRef, useState } from "react";
 import FilterChips from "../ChipButtons";
 import { getChatApiBaseUrl } from "@/utils/chatApiBase";
+import { getSocket } from "@/utils/socket";
 
 const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, setSelected, lastMessage, unseenCounts, setContactPersonId, setContactPersonEmail, fromID, fromEmail, isMobile = false }) => {
 
@@ -15,6 +16,7 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const socket = getSocket();
 
   const youLabel = `${userID}  (You)`;
 
@@ -36,7 +38,41 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
     }
 
     fetchUsers();
+    const intervalId = setInterval(fetchUsers, 15000);
+
+    return () => clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handlePresenceUpdate = (payload) => {
+      const identifier = String(payload?.identifier || "").toLowerCase();
+      if (!identifier) return;
+
+      setUsers((prev) =>
+        prev.map((user) => {
+          const email = String(user.email || "").toLowerCase();
+          const name = String(user.name || "").toLowerCase();
+
+          if (email !== identifier && name !== identifier) {
+            return user;
+          }
+
+          return {
+            ...user,
+            is_online: Boolean(payload?.isOnline),
+            last_seen: payload?.isOnline ? user.last_seen : (payload?.lastSeen || user.last_seen),
+          };
+        })
+      );
+    };
+
+    socket.on("presenceUpdate", handlePresenceUpdate);
+    return () => {
+      socket.off("presenceUpdate", handlePresenceUpdate);
+    };
+  }, [socket]);
 
   // 🔹 Close settings dropdown on outside click
   useEffect(() => {
@@ -64,7 +100,7 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
   return (
     <Box
       display='flex'
-      padding={{ xs: 1.5, md: 2, xl: 3 }}
+      padding={{ xs: 1.5, md: 2, xl: 1 }}
       width={isMobile ? '100%' : { sm: '42%', md: '36%', lg: '30%', xl: '26%' }}
       flexDirection='column'
       backgroundColor='#161717'
@@ -73,14 +109,14 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
     >
 
       {/* Header */}
-      <Box display='flex' width='100%' justifyContent='space-between' position='relative'>
-        <Typography sx={{ color: "#fff", fontSize: 24, fontWeight: 600 }}>
-          WhatsApp
+      <Box display='flex' width='100%' justifyContent='space-between' position='relative' alignItems='center'>
+        <Typography sx={{ color: "#fff", fontSize: 20 }}>
+          Chats
         </Typography>
 
         <IconButton
           ref={buttonRef}
-          size="large"
+          size="small"
           sx={getButtonSx("Settings1")}
           onClick={() => setSettings1(prev => !prev)}
         >
@@ -97,7 +133,7 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
       </Box>
 
       {/* Search */}
-      <Box width="100%">
+      <Box width="96%">
         <SearchButton />
       </Box>
 
@@ -139,7 +175,7 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
             setContactPersonEmail(String(fromEmail || "").toLowerCase());
           }}
         >
-          <ContactsCard userID={youLabel} ID={1} selectionStatus={contactPerson === userID} />
+          <ContactsCard userID={youLabel} ID={1} selectionStatus={contactPerson === userID} isOnline={true} />
         </Box>
 
         {/* USERS LIST */}
@@ -171,6 +207,8 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
                     selectionStatus={contactPerson === user.name}
                     lastMessage={userLastMessage}
                     unseenCount={unseenCount}
+                    isOnline={Boolean(user.is_online)}
+                    lastSeen={user.last_seen}
                   />
                 </Box>
               );
