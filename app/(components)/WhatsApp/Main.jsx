@@ -45,10 +45,17 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
       socket.emit("register", String(fromEmail).toLowerCase());
     };
 
+    const heartbeat = () => {
+      socket.emit("presencePing");
+    };
+
     registerUser();
+    heartbeat();
     socket.on("connect", registerUser);
+    const heartbeatInterval = setInterval(heartbeat, 10_000);
 
     return () => {
+      clearInterval(heartbeatInterval);
       socket.off("connect", registerUser);
     };
   }, [socket, fromEmail]);
@@ -147,7 +154,7 @@ const Main = ({ loading, userID, fromID, fromEmail, setLoading, setUserID }) => 
         text,
         messageType: payload.messageType || "text",
         file: payload.file || null,
-        timestamp: payload.createdAt ?? payload.timestamp ?? Date.now(),
+        timestamp: payload.createdAtMs ?? payload.timestamp ?? payload.createdAt ?? Date.now(),
       };
 
       const isActiveConversation =
