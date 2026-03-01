@@ -8,14 +8,26 @@ import Avatar from '@mui/material/Avatar';
 import Tooltip from '@mui/material/Tooltip';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
+import CallOutlinedIcon from '@mui/icons-material/CallOutlined';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { formatLastSeenLabel } from '@/utils/chatTime';
 
-function ChatNavbar({userID, contactPerson, isOnline = false, lastSeen = null, showBack = false, onBack}) {
+function ChatNavbar({
+  userID,
+  contactPerson,
+  isOnline = false,
+  lastSeen = null,
+  showBack = false,
+  onBack,
+  canCall = false,
+  onStartAudioCall,
+  onStartVideoCall,
+}) {
   const presenceText = formatLastSeenLabel({ isOnline, lastSeen }) || '';
 
   return (
-    <AppBar position="static" sx={{ backgroundColor: '#161717', justifyContent:'center', paddingY: { xs: 0.5, md: 1 } }}>
+    <AppBar position="static" sx={{ backgroundColor: '#161717', justifyContent:'center', paddingY: { xs: 0.5, md: 0.5 } }}>
       <Toolbar>
 
         {showBack ? (
@@ -37,11 +49,11 @@ function ChatNavbar({userID, contactPerson, isOnline = false, lastSeen = null, s
           </Tooltip>
 
           <Box ml={2}>
-            <Typography sx={{ fontWeight: 700, fontSize:{ xs: 16, md: 19, xl: 22 } }}>
+            <Typography sx={{ fontWeight: 700, fontSize:{ xs: 16, md: 17, xl: 17 } }}>
               {contactPerson}
             </Typography>
             {presenceText ? (
-              <Typography sx={{ fontSize: { xs: 12, md: 15, xl: 17 }, color: '#bfbfbf', fontWeight:600 }}>
+              <Typography sx={{ fontSize: { xs: 12, md: 14, xl: 14 }, color: '#bfbfbf', fontWeight:500 }}>
                 {presenceText}
               </Typography>
             ) : null}
@@ -49,12 +61,30 @@ function ChatNavbar({userID, contactPerson, isOnline = false, lastSeen = null, s
         </Box>
 
         {/* RIGHT SIDE — Search + Menu */}
-        <IconButton color="inherit">
-          <SearchIcon sx={{ width: { xs: 24, md: 32, xl: 36 }, height: { xs: 24, md: 32, xl: 36 } }}/>
-        </IconButton>
+        <Tooltip title="Search">
+          <IconButton color="inherit">
+            <SearchIcon sx={{ width: { xs: 24, md: 25, xl: 25 }, height: { xs: 24, md: 25, xl: 25 } }}/>
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title="Voice call">
+          <span>
+            <IconButton color="inherit" onClick={onStartAudioCall} disabled={!canCall}>
+              <CallOutlinedIcon sx={{ width: { xs: 24, md: 25, xl: 25 }, height: { xs: 24, md: 25, xl: 25 } }} />
+            </IconButton>
+          </span>
+        </Tooltip>
+
+        <Tooltip title="Video call">
+          <span>
+            <IconButton color="inherit" onClick={onStartVideoCall} disabled={!canCall}>
+              <VideocamOutlinedIcon sx={{ width: { xs: 24, md: 25, xl: 25 }, height: { xs: 24, md: 25, xl: 25 } }} />
+            </IconButton>
+          </span>
+        </Tooltip>
 
         <IconButton color="inherit">
-          <MoreVertIcon sx={{ width: { xs: 24, md: 32, xl: 36 }, height: { xs: 24, md: 32, xl: 36 } }}/>
+          <MoreVertIcon sx={{ width: { xs: 24, md: 25, xl: 25 }, height: { xs: 24, md: 25, xl: 25 } }}/>
         </IconButton>
 
       </Toolbar>

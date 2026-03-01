@@ -26,9 +26,12 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
       backgroundColor: '#2e2f2f'
     },
     transition: 'background-color 0.2s ease',
-    borderRadius: 3,
-    marginX: 1,
-    marginY: 0.3,
+    borderRadius: 2,
+    marginX: 0.6,
+    marginY: 0.2,
+    minHeight: 36,
+    py: 0.35,
+    px: 0.8,
   };
 
   const handleLogout = async () => {
@@ -67,11 +70,11 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
     <Grow in={open} timeout={350}>
       <Box
         sx={{
-          width: '280px',
-          maxWidth: 560,
+          width: '240px',
+          maxWidth: 480,
           bgcolor: '#1d1f1f',
           color: '#bfbfbf',
-          borderRadius: 4,
+          borderRadius: 3,
           boxShadow: 3
         }}
       >
@@ -82,13 +85,13 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
 
               <ListItem disablePadding>
                 <ListItemButton onClick={onClose} sx={hoverStyle}>
-                  <ListItemIcon sx={{ color: '#bfbfbf' }}>
-                    <GroupAddOutlined sx={{ fontSize: 30 }} />
+                  <ListItemIcon sx={{ color: '#bfbfbf', minWidth: 34 }}>
+                    <GroupAddOutlined sx={{ fontSize: 23 }} />
                   </ListItemIcon>
                   <ListItemText
                     primary="New Group"
                     primaryTypographyProps={{
-                      fontSize: 17,
+                      fontSize: 14,
                       fontWeight: 600
                     }}
                   />
@@ -97,13 +100,13 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
 
               <ListItem disablePadding>
                 <ListItemButton onClick={onClose} sx={hoverStyle}>
-                  <ListItemIcon sx={{ color: '#bfbfbf' }}>
-                    <StarOutlineOutlined sx={{ fontSize: 30 }} />
+                  <ListItemIcon sx={{ color: '#bfbfbf', minWidth: 34 }}>
+                    <StarOutlineOutlined sx={{ fontSize: 23 }} />
                   </ListItemIcon>
                   <ListItemText
                     primary="Starred messages"
                     primaryTypographyProps={{
-                      fontSize: 17,
+                      fontSize: 14,
                       fontWeight: 600
                     }}
                   />
@@ -112,13 +115,13 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
 
               <ListItem disablePadding>
                 <ListItemButton onClick={onClose} sx={hoverStyle}>
-                  <ListItemIcon sx={{ color: '#bfbfbf' }}>
-                    <CheckBoxOutlined sx={{ fontSize: 30 }} />
+                  <ListItemIcon sx={{ color: '#bfbfbf', minWidth: 34 }}>
+                    <CheckBoxOutlined sx={{ fontSize: 23 }} />
                   </ListItemIcon>
                   <ListItemText
                     primary="Select Chats"
                     primaryTypographyProps={{
-                      fontSize: 17,
+                      fontSize: 14,
                       fontWeight: 600
                     }}
                   />
@@ -127,13 +130,13 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
 
               <ListItem disablePadding>
                 <ListItemButton onClick={onClose} sx={hoverStyle}>
-                  <ListItemIcon sx={{ color: '#bfbfbf' }}>
-                    <ChatOutlined sx={{ fontSize: 30 }} />
+                  <ListItemIcon sx={{ color: '#bfbfbf', minWidth: 34 }}>
+                    <ChatOutlined sx={{ fontSize: 23 }} />
                   </ListItemIcon>
                   <ListItemText
                     primary="Mark all as read"
                     primaryTypographyProps={{
-                      fontSize: 17,
+                      fontSize: 14,
                       fontWeight: 600
                     }}
                   />
@@ -150,13 +153,13 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
 
               <ListItem disablePadding>
                 <ListItemButton onClick={onClose} sx={hoverStyle}>
-                  <ListItemIcon sx={{ color: '#bfbfbf' }}>
-                    <HttpsOutlined sx={{ fontSize: 30 }} />
+                  <ListItemIcon sx={{ color: '#bfbfbf', minWidth: 34 }}>
+                    <HttpsOutlined sx={{ fontSize: 23 }} />
                   </ListItemIcon>
                   <ListItemText
                     primary="App Lock"
                     primaryTypographyProps={{
-                      fontSize: 17,
+                      fontSize: 14,
                       fontWeight: 600
                     }}
                   />
@@ -165,13 +168,13 @@ const SettingsList = ({ onClose, setUserID, open = true }) => {
 
               <ListItem disablePadding>
                 <ListItemButton onClick={handleLogout} sx={hoverStyle}>
-                  <ListItemIcon sx={{ color: '#bfbfbf' }}>
-                    <LogoutOutlined sx={{ fontSize: 30 }} />
+                  <ListItemIcon sx={{ color: '#bfbfbf', minWidth: 34 }}>
+                    <LogoutOutlined sx={{ fontSize: 23 }} />
                   </ListItemIcon>
                   <ListItemText
                     primary="Logout"
                     primaryTypographyProps={{
-                      fontSize: 17,
+                      fontSize: 14,
                       fontWeight: 600
                     }}
                   />

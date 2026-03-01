@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { Box, Divider } from "@mui/material";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Box, Divider, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import LeftSlider from "./LeftSlider";
@@ -25,15 +25,23 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
   const [unseenCounts, setUnseenCounts] = useState({});
   const [historyEmails, setHistoryEmails] = useState([]);
   const [lastMessageAt, setLastMessageAt] = useState({});
+  const [incomingCallOffer, setIncomingCallOffer] = useState(null);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const fromEmailRef = useRef(null);
   const contactEmailRef = useRef(null);
+  const usersByEmailRef = useRef(new Map());
 
   const socket = getSocket();
   const isAdminUser = String(userRole || "").toLowerCase() === "admin";
+  const isChatsSelected = selected === "Chats";
+  const isUsersSelected = isAdminUser && selected === "Users";
+  const totalUnseenCount = useMemo(
+    () => Object.values(unseenCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0),
+    [unseenCounts]
+  );
 
   useEffect(() => {
     fromEmailRef.current = fromEmail ? String(fromEmail).toLowerCase() : null;
@@ -42,6 +50,55 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
   useEffect(() => {
     contactEmailRef.current = contactPersonEmail ? String(contactPersonEmail).toLowerCase() : null;
   }, [contactPersonEmail]);
+
+  const loadUsersIndex = useCallback(async () => {
+    if (usersByEmailRef.current.size > 0) return usersByEmailRef.current;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users`, {
+        credentials: "include",
+      });
+      if (!res.ok) return usersByEmailRef.current;
+
+      const data = await res.json();
+      const users = data?.data || [];
+      const map = new Map();
+
+      users.forEach((user) => {
+        const emailKey = String(user?.email || "").toLowerCase();
+        if (!emailKey) return;
+        map.set(emailKey, user);
+      });
+
+      usersByEmailRef.current = map;
+      return map;
+    } catch (error) {
+      console.error("Failed to load user index", error);
+      return usersByEmailRef.current;
+    }
+  }, [API_BASE_URL]);
+
+  const ensureConversationForEmail = useCallback(async (email) => {
+    const emailKey = String(email || "").toLowerCase();
+    if (!emailKey) return;
+
+    if (String(contactEmailRef.current || "").toLowerCase() === emailKey) {
+      return;
+    }
+
+    const usersMap = await loadUsersIndex();
+    const user = usersMap.get(emailKey);
+    if (!user) return;
+
+    setSelected("Chats");
+    setContactPerson(user.name || emailKey);
+    setContactPersonId(String(user.id || ""));
+    setContactPersonEmail(emailKey);
+    setContactPresence({
+      isOnline: Boolean(user.is_online),
+      lastSeen: user.last_seen || null,
+    });
+  }, [loadUsersIndex]);
 
   // ⭐ Register socket
   useEffect(() => {
@@ -281,18 +338,55 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
     };
   }, [socket]);
 
+  useEffect(() => {
+    if (!socket || !fromEmail) return;
+
+    const currentUserEmail = String(fromEmail).toLowerCase();
+
+    const handleIncomingOffer = async (payload = {}) => {
+      const to = String(payload.to || "").toLowerCase();
+      const from = String(payload.from || "").toLowerCase();
+      const callId = String(payload.callId || "").trim();
+      const phase = payload.phase === "renegotiate" ? "renegotiate" : "invite";
+      if (!to || !from || !callId || !payload?.sdp || to !== currentUserEmail || phase !== "invite") return;
+
+      await ensureConversationForEmail(from);
+
+      setIncomingCallOffer({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        ...payload,
+        callId,
+        phase,
+        from,
+        to,
+      });
+    };
+
+    socket.on("call:offer", handleIncomingOffer);
+
+    return () => {
+      socket.off("call:offer", handleIncomingOffer);
+    };
+  }, [ensureConversationForEmail, fromEmail, socket]);
+
   return (
     <Box display='flex' width='100%' height='100dvh' sx={{ minHeight: 0, backgroundColor: '#161717' }}>
       {!isMobile && (
         <>
-          <LeftSlider userID={userID} selected={selected} onSelect={setSelected} isAdmin={isAdminUser} />
+          <LeftSlider
+            userID={userID}
+            selected={selected}
+            onSelect={setSelected}
+            isAdmin={isAdminUser}
+            totalUnseenCount={totalUnseenCount}
+          />
           <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />
         </>
       )}
 
-      {isAdminUser && selected === "Users" ? (
+      {isUsersSelected ? (
         <UserManagementPanel />
-      ) : (!isMobile || !contactPersonEmail) ? (
+      ) : isChatsSelected && (!isMobile || !contactPersonEmail) ? (
         <Chats
           userID={userID}
           contactPerson={contactPerson}
@@ -315,9 +409,9 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
         />
       ) : null}
 
-      {!isMobile && selected !== "Users" && <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />}
+      {!isMobile && isChatsSelected && <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />}
 
-      {selected !== "Users" && (!isMobile || !!contactPersonEmail) && (
+      {isChatsSelected && (!isMobile || !!contactPersonEmail) && (
         <Chat
           userID={userID}
           fromID={fromID}
@@ -330,6 +424,8 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
           contactIsOnline={Boolean(contactPresence?.isOnline)}
           contactLastSeen={contactPresence?.lastSeen || null}
           messages={messages}
+          incomingCallOffer={incomingCallOffer}
+          onIncomingCallOfferConsumed={() => setIncomingCallOffer(null)}
           isMobile={isMobile}
           onBack={() => {
             setContactPerson(null);
@@ -337,6 +433,21 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
             setContactPersonEmail(null);
           }}
         />
+      )}
+
+      {!isUsersSelected && !isChatsSelected && (
+        <Box
+          display='flex'
+          flexDirection='column'
+          width='100%'
+          height='100dvh'
+          sx={{ minHeight: 0, backgroundColor: '#161717' }}
+          padding={{ xs: 1.5, md: 2, xl: 1 }}
+        >
+          <Typography sx={{ color: "#fff", fontSize: 20 }}>
+            {selected}
+          </Typography>
+        </Box>
       )}
     </Box>
   );

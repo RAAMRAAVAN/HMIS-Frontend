@@ -1,7 +1,7 @@
 import { DataSaverOff, GroupsRounded, ManageAccountsRounded, MarkUnreadChatAltRounded, SettingsRounded } from "@mui/icons-material";
-import { Avatar, Box, IconButton, Tooltip } from "@mui/material";
+import { Avatar, Badge, Box, IconButton, Tooltip } from "@mui/material";
 
-const LeftSlider = ({ selected, onSelect, isAdmin }) => {
+const LeftSlider = ({ selected, onSelect, isAdmin, totalUnseenCount = 0 }) => {
     
         const getButtonSx = (name) => ({
             marginTop: 1,
@@ -56,10 +56,29 @@ const LeftSlider = ({ selected, onSelect, isAdmin }) => {
                         onClick={() => onSelect("Chats")}
                         sx={getButtonSx("Chats")}
                     >
-                        <MarkUnreadChatAltRounded
-                            fontSize="inherit"
-                            sx={{ color: getIconColor("Chats") }}
-                        />
+                        <Badge
+                            color="success"
+                            badgeContent={totalUnseenCount > 99 ? "99+" : totalUnseenCount}
+                            invisible={totalUnseenCount <= 0}
+                            overlap="circular"
+                            anchorOrigin={{ vertical: "top", horizontal: "right" }}
+                            sx={{
+                                '& .MuiBadge-badge': {
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    minWidth: 18,
+                                    height: 18,
+                                    borderRadius: '999px',
+                                    top: 5,
+                                    right: -4,
+                                },
+                            }}
+                        >
+                            <MarkUnreadChatAltRounded
+                                fontSize="inherit"
+                                sx={{ color: getIconColor("Chats") }}
+                            />
+                        </Badge>
                     </IconButton>
                 </Tooltip>
 

@@ -70,7 +70,7 @@ const LoginPage = ({ userID, setUserID, setFromID, setFromEmail, setUserRole }) 
 
   return (
     <Box display='flex' width='100%' height='100%' justifyContent='center' alignItems='center'>
-      <Box display='flex' flexDirection='column' width='500px' gap={1.5}>
+      <Box display='flex' flexDirection='column' width='500px' gap={1.5} paddingX={2} paddingY={3} borderRadius={2} boxShadow={3} margin={1}>
 
         <Typography textAlign='center' fontSize={22} fontWeight={600}>
           WhatsApp Login
