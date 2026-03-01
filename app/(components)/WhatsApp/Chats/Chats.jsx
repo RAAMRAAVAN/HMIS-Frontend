@@ -17,30 +17,66 @@ const Chats = ({ userID, setUserID,contactPerson, setContactPerson, selected, se
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const socket = getSocket();
+  const fetchUsersRef = useRef(async () => {});
 
   const youLabel = `${userID}  (You)`;
 
   // 🔹 Fetch users from API
   useEffect(() => {
-    async function fetchUsers() {
+    const fetchUsers = async () => {
       const apiBaseUrl = getChatApiBaseUrl();
+
       try {
         const res = await fetch(`${apiBaseUrl}/api/users`, {
-          credentials: "include"
+          credentials: "include",
         });
+
+        if (!res.ok) return;
         const data = await res.json();
         setUsers(data?.data || []);
       } catch (err) {
-        console.error("Failed to fetch users", err);
+        if (err?.name !== "AbortError") {
+          console.error("Failed to fetch users", err);
+        }
       } finally {
         setLoading(false);
       }
-    }
+    };
+
+    fetchUsersRef.current = fetchUsers;
+
+    let timerId;
+    let stopped = false;
+
+    const scheduleNext = () => {
+      if (stopped) return;
+
+      const isHidden = typeof document !== "undefined" && document.hidden;
+      const delay = isHidden ? 120000 : 45000;
+
+      timerId = setTimeout(async () => {
+        if (stopped) return;
+        await fetchUsersRef.current();
+        scheduleNext();
+      }, delay);
+    };
+
+    const handleVisibilityChange = async () => {
+      if (typeof document === "undefined") return;
+      if (!document.hidden) {
+        await fetchUsersRef.current();
+      }
+    };
 
     fetchUsers();
-    const intervalId = setInterval(fetchUsers, 15000);
+    scheduleNext();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    return () => clearInterval(intervalId);
+    return () => {
+      stopped = true;
+      if (timerId) clearTimeout(timerId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   useEffect(() => {

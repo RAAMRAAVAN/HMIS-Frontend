@@ -8,7 +8,13 @@ export const getSocket = () => {
   if (!socket) {
     socket = io(getChatApiBaseUrl(), {
       transports: ["websocket"],
-      withCredentials: true
+      withCredentials: true,
+      timeout: 10000,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+      randomizationFactor: 0.5,
     });
   }
   return socket;
