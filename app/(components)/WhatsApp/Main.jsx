@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Divider, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import LeftSlider from "./LeftSlider";
-import Chats from "./Chats/Chats";
-import Chat from "./Chats/Chat/Chat";
-import UserManagementPanel from "./Users/UserManagementPanel";
+import LeftSidebar from "./features/layout/LeftSidebar";
+import ChatsPanel from "./features/chats/ChatsPanel";
+import ChatPanel from "./features/chats/chat/ChatPanel";
+import UserManagementPanel from "./features/users/UserManagementPanel";
 import { getSocket } from "@/utils/socket";
 import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 import { toEpochMs } from "@/utils/chatTime";
@@ -247,7 +247,9 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
       const from = String(payload.from ?? payload.fromID ?? payload.fromUserId ?? "").toLowerCase();
       const to = String(payload.to ?? payload.toID ?? payload.toUserId ?? "").toLowerCase();
       const text = payload.text ?? payload.message ?? "";
-      if (!from || !to || !text) return;
+      const messageType = payload.messageType || "text";
+      const isCallEvent = messageType === "call";
+      if (!from || !to || (!text && !isCallEvent)) return;
 
       const currentFromEmail = fromEmailRef.current;
       const currentContactEmail = contactEmailRef.current;
@@ -258,8 +260,9 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
         from,
         to,
         text,
-        messageType: payload.messageType || "text",
+        messageType,
         file: payload.file || null,
+        call: payload.call || null,
         timestamp: toEpochMs(payload.timestampMs ?? payload.createdAtMs ?? payload.timestamp ?? payload.createdAt),
       };
 
@@ -373,7 +376,7 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
     <Box display='flex' width='100%' height='100dvh' sx={{ minHeight: 0, backgroundColor: '#161717' }}>
       {!isMobile && (
         <>
-          <LeftSlider
+          <LeftSidebar
             userID={userID}
             selected={selected}
             onSelect={setSelected}
@@ -387,7 +390,7 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
       {isUsersSelected ? (
         <UserManagementPanel />
       ) : isChatsSelected && (!isMobile || !contactPersonEmail) ? (
-        <Chats
+        <ChatsPanel
           userID={userID}
           contactPerson={contactPerson}
           setContactPerson={setContactPerson}
@@ -412,7 +415,7 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
       {!isMobile && isChatsSelected && <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />}
 
       {isChatsSelected && (!isMobile || !!contactPersonEmail) && (
-        <Chat
+        <ChatPanel
           userID={userID}
           fromID={fromID}
           fromEmail={fromEmail}
