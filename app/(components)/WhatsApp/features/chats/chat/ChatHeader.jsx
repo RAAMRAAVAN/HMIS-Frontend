@@ -12,10 +12,12 @@ import CallOutlinedIcon from '@mui/icons-material/CallOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { formatLastSeenLabel } from '@/utils/chatTime';
+import { resolveChatAssetUrl } from '@/utils/chatAssetUrl';
 
 function ChatHeader({
   userID,
   contactPerson,
+  avatarSrc = "",
   isOnline = false,
   lastSeen = null,
   showBack = false,
@@ -42,7 +44,7 @@ function ChatHeader({
             <IconButton sx={{ p: 0 }}>
               <Avatar 
                 alt={userID}
-                src="/dummy.png"
+                src={resolveChatAssetUrl(avatarSrc)}
                 sx={{ width: { xs: 36, md: 48, xl: 56 }, height: { xs: 36, md: 48, xl: 56 } }}
               />
             </IconButton>

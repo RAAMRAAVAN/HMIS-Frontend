@@ -16,12 +16,29 @@ import VolumeUpRoundedIcon from "@mui/icons-material/VolumeUpRounded";
 import VolumeDownRoundedIcon from "@mui/icons-material/VolumeDownRounded";
 import VolumeOffRoundedIcon from "@mui/icons-material/VolumeOffRounded";
 import SpeakerRoundedIcon from "@mui/icons-material/SpeakerRounded";
+import ExpandLessRoundedIcon from "@mui/icons-material/ExpandLessRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
+import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import ChatHeader from "./ChatHeader";
 import ChatMessageList from "./ChatMessageList";
 import { getSocket } from "@/utils/socket";
+import { trackCallAnomaly } from "@/utils/callAnomalyTracker";
+import { resolveChatAssetUrl } from "@/utils/chatAssetUrl";
 
-const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonEmail, fromID, fromEmail, contactIsOnline = false, contactLastSeen = null, incomingCallOffer = null, onIncomingCallOfferConsumed, isMobile = false, onBack }) => {
+const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonEmail, contactProfileImage = null, fromID, fromEmail, contactIsOnline = false, contactLastSeen = null, incomingCallOffer = null, onIncomingCallOfferConsumed, onCallOverlayChange, overlayOnlyMode = false, isMobile = false, onBack }) => {
+    const FLOATING_CALL_CORNER_KEY = "whatsapp_floating_call_corner_v1";
+    const DRAG_HINT_SEEN_KEY_PREFIX = "whatsapp_floating_call_drag_hint_seen_v1";
     const socket = getSocket();
+    const chatContainerRef = useRef(null);
+    const floatingCallPanelRef = useRef(null);
+    const dragRef = useRef({
+        pointerId: null,
+        startX: 0,
+        startY: 0,
+        originX: 0,
+        originY: 0,
+        dragging: false,
+    });
     const localVideoRef = useRef(null);
     const remoteVideoRef = useRef(null);
     const remoteAudioRef = useRef(null);
@@ -53,12 +70,16 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
     const [micEnabled, setMicEnabled] = useState(true);
     const [cameraEnabled, setCameraEnabled] = useState(false);
     const [isOnHold, setIsOnHold] = useState(false);
+    const [isRenegotiating, setIsRenegotiating] = useState(false);
     const [remoteOnHold, setRemoteOnHold] = useState(false);
     const [remoteMediaState, setRemoteMediaState] = useState({ micEnabled: true, cameraEnabled: true });
     const [audioLevelPreset, setAudioLevelPreset] = useState("normal");
     const [availableOutputDevices, setAvailableOutputDevices] = useState([]);
     const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState("default");
     const [outputMenuAnchorEl, setOutputMenuAnchorEl] = useState(null);
+    const [isCallPanelCollapsed, setIsCallPanelCollapsed] = useState(false);
+    const [floatingCallPosition, setFloatingCallPosition] = useState(null);
+    const [showDragInstruction, setShowDragInstruction] = useState(false);
 
     const volumeByPreset = useMemo(
         () => ({
@@ -80,6 +101,23 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
     const canCall = Boolean(contactPersonEmail && fromEmail && socket);
     const normalizedFromEmail = String(fromEmail || "").toLowerCase();
     const normalizedContactEmail = String(contactPersonEmail || "").toLowerCase();
+    const dragHintSeenStorageKey = `${DRAG_HINT_SEEN_KEY_PREFIX}:${normalizedFromEmail || "anonymous"}`;
+
+    const reportCallAnomaly = useCallback((code, message, details = null, severity = "warn") => {
+        trackCallAnomaly({
+            socket,
+            code,
+            message,
+            severity,
+            from: normalizedFromEmail,
+            contact: normalizedContactEmail,
+            callId: activeCallIdRef.current || null,
+            details: {
+                callPhase: callPhaseRef.current,
+                ...(details && typeof details === "object" ? details : {}),
+            },
+        });
+    }, [normalizedContactEmail, normalizedFromEmail, socket]);
 
     const formatDuration = (startAt) => {
         if (!startAt) return "00:00";
@@ -124,7 +162,8 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
     useEffect(() => {
         if (!remoteAudioRef.current) return;
         remoteAudioRef.current.srcObject = remoteStream || null;
-        remoteAudioRef.current.muted = false;
+        const shouldMuteRemoteAudio = Boolean(isOnHold || remoteOnHold || audioLevelPreset === "mute");
+        remoteAudioRef.current.muted = shouldMuteRemoteAudio;
         remoteAudioRef.current.volume = volumeByPreset[audioLevelPreset] ?? 0.75;
 
         if (remoteStream) {
@@ -133,7 +172,7 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                 playPromise.catch(() => {});
             }
         }
-    }, [audioLevelPreset, remoteStream, callPhase, volumeByPreset]);
+    }, [audioLevelPreset, isOnHold, remoteOnHold, remoteStream, callPhase, volumeByPreset]);
 
     useEffect(() => {
         const audioElement = remoteAudioRef.current;
@@ -146,6 +185,45 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
         if (!stream) return;
         stream.getTracks().forEach((track) => track.stop());
     };
+
+    const releaseMediaElements = useCallback(() => {
+        const elements = [localVideoRef.current, remoteVideoRef.current, remoteAudioRef.current];
+
+        elements.forEach((element) => {
+            if (!element) return;
+
+            const srcObject = element.srcObject;
+            if (srcObject && typeof srcObject.getTracks === "function") {
+                srcObject.getTracks().forEach((track) => {
+                    try {
+                        track.stop();
+                    } catch {
+                        // no-op
+                    }
+                });
+            }
+
+            try {
+                element.pause?.();
+            } catch {
+                // no-op
+            }
+
+            element.srcObject = null;
+        });
+    }, []);
+
+    const releaseToneAudioContext = useCallback(() => {
+        if (!toneAudioContextRef.current) return;
+
+        try {
+            toneAudioContextRef.current.close?.().catch(() => {});
+        } catch {
+            // no-op
+        }
+
+        toneAudioContextRef.current = null;
+    }, []);
 
     const clearToneTimeouts = useCallback(() => {
         toneTimeoutsRef.current.forEach((timeoutId) => clearTimeout(timeoutId));
@@ -300,7 +378,7 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             return;
         }
 
-        if (callPhase === "outgoing" || callPhase === "connecting") {
+        if (callPhase === "outgoing") {
             startOutgoingRingback();
             return;
         }
@@ -313,6 +391,11 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             refreshOutputDevices();
         }
     }, [callPhase, refreshOutputDevices]);
+
+    useEffect(() => {
+        if (!isRenegotiating) return;
+        setOutputMenuAnchorEl(null);
+    }, [isRenegotiating]);
 
     const clearCallTimers = useCallback(() => {
         if (outgoingTimeoutRef.current) {
@@ -336,6 +419,7 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
         setMicEnabled(true);
         setCameraEnabled(false);
         setIsOnHold(false);
+        setIsRenegotiating(false);
         setRemoteOnHold(false);
         setRemoteMediaState({ micEnabled: true, cameraEnabled: true });
         incomingOfferRef.current = null;
@@ -362,9 +446,11 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
         localStreamRef.current = null;
         remoteStreamRef.current = null;
 
+        releaseMediaElements();
+
         setLocalStream(null);
         setRemoteStream(null);
-    }, []);
+    }, [releaseMediaElements]);
 
     const clearRemoteVideoOutput = useCallback(() => {
         const remote = remoteStreamRef.current;
@@ -400,8 +486,9 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
         clearCallTimers();
         cleanupPeerConnection();
         stopAllMedia();
+        releaseToneAudioContext();
         resetCallUi(message);
-    }, [cleanupPeerConnection, clearCallTimers, resetCallUi, stopAllMedia, stopRingtones]);
+    }, [cleanupPeerConnection, clearCallTimers, releaseToneAudioContext, resetCallUi, stopAllMedia, stopRingtones]);
 
     const getSenderByKind = useCallback((kind) => {
         const pc = peerConnectionRef.current;
@@ -422,20 +509,40 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
         });
     }, [callPeerEmail, normalizedFromEmail, socket]);
 
-    const syncLocalTrackState = useCallback((nextMicEnabled, nextCameraEnabled, nextOnHold) => {
+    const syncLocalTrackState = useCallback((nextMicEnabled, nextCameraEnabled, nextOnHold, nextRemoteOnHold = remoteOnHold) => {
         const stream = localStreamRef.current;
-        if (!stream) return;
+        const pc = peerConnectionRef.current;
 
-        const effectiveMic = nextOnHold ? false : nextMicEnabled;
-        const effectiveCamera = nextOnHold ? false : nextCameraEnabled;
+        const effectiveHold = Boolean(nextOnHold || nextRemoteOnHold);
+        const effectiveMic = effectiveHold ? false : nextMicEnabled;
+        const effectiveCamera = effectiveHold ? false : nextCameraEnabled;
 
-        stream.getAudioTracks().forEach((track) => {
-            track.enabled = effectiveMic;
-        });
-        stream.getVideoTracks().forEach((track) => {
-            track.enabled = effectiveCamera;
-        });
-    }, []);
+        if (stream) {
+            stream.getAudioTracks().forEach((track) => {
+                track.enabled = effectiveMic;
+            });
+            stream.getVideoTracks().forEach((track) => {
+                track.enabled = effectiveCamera;
+            });
+        }
+
+        if (pc) {
+            pc.getSenders().forEach((sender) => {
+                if (!sender?.track) return;
+                if (sender.track.kind === "audio") {
+                    sender.track.enabled = effectiveMic;
+                }
+                if (sender.track.kind === "video") {
+                    sender.track.enabled = effectiveCamera;
+                }
+            });
+        }
+
+        return {
+            micEnabled: effectiveMic,
+            cameraEnabled: effectiveCamera,
+        };
+    }, [remoteOnHold]);
 
     const sendMediaState = useCallback((nextMicEnabled, nextCameraEnabled) => {
         emitToPeer("call:media-state", {
@@ -444,18 +551,42 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
         });
     }, [emitToPeer]);
 
+    useEffect(() => {
+        if (callPhase === "idle") return;
+
+        const effectiveState = syncLocalTrackState(micEnabled, cameraEnabled, isOnHold, remoteOnHold);
+        const audioElement = remoteAudioRef.current;
+        if (audioElement) {
+            audioElement.muted = Boolean(isOnHold || remoteOnHold || audioLevelPreset === "mute");
+        }
+
+        if (effectiveState) {
+            sendMediaState(effectiveState.micEnabled, effectiveState.cameraEnabled);
+        }
+    }, [audioLevelPreset, callPhase, cameraEnabled, isOnHold, micEnabled, remoteOnHold, sendMediaState, syncLocalTrackState]);
+
     const renegotiateConnection = useCallback(async (nextCallType) => {
         const pc = peerConnectionRef.current;
         if (!pc) return;
 
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
+        try {
+            setIsRenegotiating(true);
+            setCallMessage("Updating call...");
 
-        emitToPeer("call:offer", {
-            phase: "renegotiate",
-            callType: nextCallType || callType,
-            sdp: offer,
-        });
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            emitToPeer("call:offer", {
+                phase: "renegotiate",
+                callType: nextCallType || callType,
+                sdp: offer,
+            });
+        } catch (error) {
+            console.error("Failed to renegotiate call", error);
+            setIsRenegotiating(false);
+            setCallMessage("Unable to switch call mode");
+            throw error;
+        }
     }, [callType, emitToPeer]);
 
     const createPeerConnection = useCallback((peerEmail) => {
@@ -485,10 +616,19 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                     clearTimeout(disconnectedTimeoutRef.current);
                     disconnectedTimeoutRef.current = null;
                 }
+
+                if (callPhaseRef.current !== "active") {
+                    clearCallTimers();
+                    setConnectionStatus("Connected");
+                    setCallPhase("active");
+                    setCallStartedAt((prev) => prev || Date.now());
+                    setCallMessage("");
+                }
                 return;
             }
 
             if (iceState === "disconnected") {
+                setConnectionStatus("Reconnecting");
                 try {
                     if (typeof pc.restartIce === "function") {
                         pc.restartIce();
@@ -496,6 +636,8 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                 } catch (error) {
                     console.error("ICE restart failed", error);
                 }
+            } else if (iceState === "failed" || iceState === "closed") {
+                finishCallLocally("Call ended");
             }
         };
 
@@ -633,6 +775,7 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
 
     const rejectIncomingCall = useCallback(() => {
         const incoming = incomingOfferRef.current;
+        stopRingtones();
         if (socket && incoming?.from && normalizedFromEmail && incoming?.callId) {
             socket.emit("call:reject", {
                 callId: incoming.callId,
@@ -641,11 +784,13 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             });
         }
         finishCallLocally("");
-    }, [finishCallLocally, normalizedFromEmail, socket]);
+    }, [finishCallLocally, normalizedFromEmail, socket, stopRingtones]);
 
     const acceptIncomingCall = useCallback(async () => {
         const incoming = incomingOfferRef.current;
         if (!incoming || !socket) return;
+
+        stopRingtones();
 
         const peerEmail = String(incoming.from || "").toLowerCase();
         if (!peerEmail || !incoming.callId) return;
@@ -690,7 +835,7 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             console.error("Failed to accept call", error);
             finishCallLocally("Unable to connect call");
         }
-    }, [createPeerConnection, finishCallLocally, normalizedFromEmail, socket]);
+    }, [createPeerConnection, finishCallLocally, normalizedFromEmail, socket, stopRingtones]);
 
     useEffect(() => {
         if (!incomingCallOffer?.id || !socket || !normalizedFromEmail) return;
@@ -702,6 +847,13 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
         const from = String(incomingCallOffer.from || "").toLowerCase();
         const callId = String(incomingCallOffer.callId || "").trim();
         if (!to || !from || !callId || to !== normalizedFromEmail) {
+            reportCallAnomaly("incoming-offer-invalid-in-chat", "Incoming offer ignored in chat panel", {
+                hasTo: Boolean(to),
+                hasFrom: Boolean(from),
+                hasCallId: Boolean(callId),
+                expectedTo: normalizedFromEmail,
+                actualTo: to,
+            });
             if (typeof onIncomingCallOfferConsumed === "function") {
                 onIncomingCallOfferConsumed();
             }
@@ -750,20 +902,40 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             const callId = String(payload.callId || "").trim();
             const pc = peerConnectionRef.current;
             if (!pc || !payload?.sdp) return;
+
+            if (to === normalizedFromEmail && from === peerEmailRef.current && (!callId || callId !== activeCallIdRef.current)) {
+                reportCallAnomaly("answer-callid-mismatch", "Received call answer with mismatched call id", {
+                    receivedCallId: callId || null,
+                    activeCallId: activeCallIdRef.current || null,
+                });
+            }
+
             if (to !== normalizedFromEmail || from !== peerEmailRef.current) return;
             if (!callId || callId !== activeCallIdRef.current) return;
 
             try {
+                stopRingtones();
                 await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
                 for (const candidate of pendingCandidatesRef.current) {
                     await pc.addIceCandidate(new RTCIceCandidate(candidate));
                 }
                 pendingCandidatesRef.current = [];
                 clearCallTimers();
-                setCallPhase("connecting");
-                setCallMessage("Connecting...");
+
+                if (callPhaseRef.current !== "active") {
+                    setCallPhase("connecting");
+                    setCallMessage("Connecting...");
+                } else {
+                    setCallPhase("active");
+                    setCallMessage("");
+                }
+                setIsRenegotiating(false);
             } catch (error) {
                 console.error("Failed to apply call answer", error);
+                reportCallAnomaly("apply-answer-failed", "Failed to apply remote answer", {
+                    error: error?.message || String(error),
+                }, "error");
+                setIsRenegotiating(false);
                 finishCallLocally("Call failed");
             }
         };
@@ -789,6 +961,9 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                 await pc.addIceCandidate(new RTCIceCandidate(candidate));
             } catch (error) {
                 console.error("Failed to add ICE candidate", error);
+                reportCallAnomaly("add-ice-failed", "Failed to add ICE candidate", {
+                    error: error?.message || String(error),
+                }, "warn");
             }
         };
 
@@ -838,6 +1013,12 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
 
             const nextOnHold = Boolean(payload.onHold);
             setRemoteOnHold(nextOnHold);
+
+            const effectiveState = syncLocalTrackState(micEnabled, cameraEnabled, isOnHold, nextOnHold);
+            if (effectiveState) {
+                sendMediaState(effectiveState.micEnabled, effectiveState.cameraEnabled);
+            }
+
             if (nextOnHold) {
                 setCallMessage("Peer has put call on hold");
             } else if (callPhaseRef.current === "active") {
@@ -874,6 +1055,7 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             if (!pc) return;
 
             try {
+                setIsRenegotiating(true);
                 const localStream = localStreamRef.current;
 
                 if (renegotiatedType === "video") {
@@ -881,35 +1063,9 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                         localStream?.getVideoTracks()?.some((track) => track.readyState === "live")
                     );
 
-                    if (!hasLiveLocalVideo) {
-                        const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                        const newVideoTrack = cameraStream.getVideoTracks()[0];
-
-                        if (newVideoTrack) {
-                            const activeLocalStream = localStream || new MediaStream();
-                            const existingVideoTracks = activeLocalStream.getVideoTracks();
-                            existingVideoTracks.forEach((track) => {
-                                track.stop();
-                                activeLocalStream.removeTrack(track);
-                            });
-
-                            activeLocalStream.addTrack(newVideoTrack);
-
-                            const videoSender = pc.getSenders().find((sender) => sender.track?.kind === "video");
-                            if (videoSender) {
-                                await videoSender.replaceTrack(newVideoTrack);
-                            } else {
-                                pc.addTrack(newVideoTrack, activeLocalStream);
-                            }
-
-                            const normalizedLocalStream = new MediaStream(activeLocalStream.getTracks());
-                            localStreamRef.current = normalizedLocalStream;
-                            setLocalStream(normalizedLocalStream);
-                            setCameraEnabled(true);
-                        }
-                    } else {
-                        setCameraEnabled(true);
-                    }
+                    // Do not auto-enable peer camera when the other side upgrades to video.
+                    // Keep current local camera state unless this user explicitly enables camera.
+                    setCameraEnabled(hasLiveLocalVideo);
                 } else {
                     if (localStream) {
                         localStream.getVideoTracks().forEach((track) => {
@@ -946,8 +1102,15 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                 await pc.setLocalDescription(answer);
 
                 emitToPeer("call:answer", { sdp: answer });
+                setCallMessage("");
+                setIsRenegotiating(false);
             } catch (error) {
                 console.error("Failed renegotiation handling", error);
+                reportCallAnomaly("renegotiation-handler-failed", "Failed to handle renegotiation offer", {
+                    error: error?.message || String(error),
+                    renegotiatedType,
+                }, "error");
+                setIsRenegotiating(false);
             }
         };
 
@@ -968,7 +1131,7 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             socket.off("call:hold", onHold);
             socket.off("call:media-state", onMediaState);
         };
-    }, [clearCallTimers, clearRemoteVideoOutput, emitToPeer, finishCallLocally, normalizedFromEmail, socket]);
+    }, [cameraEnabled, clearCallTimers, clearRemoteVideoOutput, emitToPeer, finishCallLocally, isOnHold, micEnabled, normalizedFromEmail, reportCallAnomaly, sendMediaState, socket, stopRingtones, syncLocalTrackState]);
 
     useEffect(() => {
         return () => {
@@ -977,24 +1140,62 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             clearCallTimers();
             cleanupPeerConnection();
             stopAllMedia();
-
-            if (toneAudioContextRef.current) {
-                toneAudioContextRef.current.close?.().catch(() => {});
-                toneAudioContextRef.current = null;
-            }
+            releaseToneAudioContext();
         };
-    }, [clearCallTimers, cleanupPeerConnection, stopAllMedia, stopRingtones]);
+    }, [clearCallTimers, cleanupPeerConnection, releaseToneAudioContext, stopAllMedia, stopRingtones]);
+
+    useEffect(() => {
+        const releaseOnExit = () => {
+            const peerEmail = String(peerEmailRef.current || callPeerEmail || "").toLowerCase();
+            const callId = String(activeCallIdRef.current || "").trim();
+
+            if (callId || peerEmail) {
+                reportCallAnomaly(
+                    "forced-exit-cleanup",
+                    "Triggered forced page-exit call cleanup",
+                    {
+                        reason: "pagehide-or-beforeunload",
+                        hasPeerEmail: Boolean(peerEmail),
+                        hasCallId: Boolean(callId),
+                    },
+                    "warn"
+                );
+            }
+
+            if (socket && normalizedFromEmail && peerEmail && callId) {
+                socket.emit("call:end", {
+                    callId,
+                    from: normalizedFromEmail,
+                    to: peerEmail,
+                });
+            }
+
+            stopRingtones();
+            clearCallTimers();
+            cleanupPeerConnection();
+            stopAllMedia();
+            releaseToneAudioContext();
+        };
+
+        window.addEventListener("pagehide", releaseOnExit);
+        window.addEventListener("beforeunload", releaseOnExit);
+
+        return () => {
+            window.removeEventListener("pagehide", releaseOnExit);
+            window.removeEventListener("beforeunload", releaseOnExit);
+        };
+    }, [callPeerEmail, clearCallTimers, cleanupPeerConnection, normalizedFromEmail, releaseToneAudioContext, reportCallAnomaly, socket, stopAllMedia, stopRingtones]);
 
     const toggleMic = useCallback(() => {
-        if (callPhaseRef.current === "idle") return;
+        if (callPhaseRef.current !== "active" || isRenegotiating) return;
         const nextMicEnabled = !micEnabled;
         setMicEnabled(nextMicEnabled);
         syncLocalTrackState(nextMicEnabled, cameraEnabled, isOnHold);
         sendMediaState(nextMicEnabled, cameraEnabled);
-    }, [cameraEnabled, isOnHold, micEnabled, sendMediaState, syncLocalTrackState]);
+    }, [cameraEnabled, isOnHold, isRenegotiating, micEnabled, sendMediaState, syncLocalTrackState]);
 
     const toggleCamera = useCallback(async () => {
-        if (callPhaseRef.current === "idle") return;
+        if (callPhaseRef.current !== "active" || isRenegotiating) return;
 
         if (callType === "audio") {
             try {
@@ -1024,19 +1225,74 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                 await renegotiateConnection("video");
             } catch (error) {
                 console.error("Failed to enable video", error);
+                reportCallAnomaly("enable-video-failed", "Unable to enable video during active call", {
+                    error: error?.message || String(error),
+                }, "warn");
                 setCallMessage("Unable to access camera");
             }
             return;
         }
 
         const nextCameraEnabled = !cameraEnabled;
+
+        if (nextCameraEnabled) {
+            const localStream = localStreamRef.current;
+            const hasLiveLocalVideo = Boolean(
+                localStream?.getVideoTracks()?.some((track) => track.readyState === "live")
+            );
+
+            if (!hasLiveLocalVideo) {
+                try {
+                    const videoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                    const videoTrack = videoStream.getVideoTracks()[0];
+                    if (!videoTrack) return;
+
+                    const activeLocalStream = localStream || new MediaStream();
+                    const existingVideoTracks = activeLocalStream.getVideoTracks();
+                    existingVideoTracks.forEach((track) => {
+                        track.stop();
+                        activeLocalStream.removeTrack(track);
+                    });
+
+                    activeLocalStream.addTrack(videoTrack);
+
+                    const normalizedLocalStream = new MediaStream(activeLocalStream.getTracks());
+                    localStreamRef.current = normalizedLocalStream;
+                    setLocalStream(normalizedLocalStream);
+
+                    const pc = peerConnectionRef.current;
+                    if (!pc) return;
+
+                    const existingSender = getSenderByKind("video");
+                    if (existingSender) {
+                        await existingSender.replaceTrack(videoTrack);
+                    } else {
+                        pc.addTrack(videoTrack, normalizedLocalStream);
+                    }
+
+                    setCameraEnabled(true);
+                    syncLocalTrackState(micEnabled, true, isOnHold);
+                    sendMediaState(micEnabled, true);
+                    await renegotiateConnection("video");
+                    return;
+                } catch (error) {
+                    console.error("Failed to enable local camera", error);
+                    reportCallAnomaly("enable-local-camera-failed", "Failed to enable local camera", {
+                        error: error?.message || String(error),
+                    }, "warn");
+                    setCallMessage("Unable to access camera");
+                    return;
+                }
+            }
+        }
+
         setCameraEnabled(nextCameraEnabled);
         syncLocalTrackState(micEnabled, nextCameraEnabled, isOnHold);
         sendMediaState(micEnabled, nextCameraEnabled);
-    }, [callType, cameraEnabled, getSenderByKind, isOnHold, micEnabled, renegotiateConnection, sendMediaState, syncLocalTrackState]);
+    }, [callType, cameraEnabled, getSenderByKind, isOnHold, isRenegotiating, micEnabled, renegotiateConnection, reportCallAnomaly, sendMediaState, syncLocalTrackState]);
 
     const switchCallMode = useCallback(async () => {
-        if (callPhaseRef.current === "idle") return;
+        if (callPhaseRef.current !== "active" || isRenegotiating) return;
         const pc = peerConnectionRef.current;
         if (!pc) return;
 
@@ -1048,6 +1304,9 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                     await videoSender.replaceTrack(null);
                 } catch (error) {
                     console.error("Failed to detach video sender", error);
+                    reportCallAnomaly("detach-video-sender-failed", "Failed to detach video sender while switching to audio", {
+                        error: error?.message || String(error),
+                    }, "warn");
                 }
             }
 
@@ -1094,18 +1353,24 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             await renegotiateConnection("video");
         } catch (error) {
             console.error("Failed to switch to video", error);
+            reportCallAnomaly("switch-to-video-failed", "Failed to switch call mode to video", {
+                error: error?.message || String(error),
+            }, "warn");
             setCallMessage("Unable to switch to video");
         }
-    }, [callType, clearRemoteVideoOutput, getSenderByKind, isOnHold, micEnabled, renegotiateConnection, sendMediaState, syncLocalTrackState]);
+    }, [callType, clearRemoteVideoOutput, getSenderByKind, isOnHold, isRenegotiating, micEnabled, renegotiateConnection, reportCallAnomaly, sendMediaState, syncLocalTrackState]);
 
     const toggleHold = useCallback(() => {
-        if (callPhaseRef.current === "idle") return;
+        if (callPhaseRef.current !== "active" || isRenegotiating) return;
         const nextHold = !isOnHold;
         setIsOnHold(nextHold);
-        syncLocalTrackState(micEnabled, cameraEnabled, nextHold);
+        const effectiveState = syncLocalTrackState(micEnabled, cameraEnabled, nextHold, remoteOnHold);
+        if (effectiveState) {
+            sendMediaState(effectiveState.micEnabled, effectiveState.cameraEnabled);
+        }
         emitToPeer("call:hold", { onHold: nextHold });
         setCallMessage(nextHold ? "Call on hold" : "");
-    }, [cameraEnabled, emitToPeer, isOnHold, micEnabled, syncLocalTrackState]);
+    }, [cameraEnabled, emitToPeer, isOnHold, isRenegotiating, micEnabled, remoteOnHold, sendMediaState, syncLocalTrackState]);
 
     const mergeCalls = useCallback(() => {
         setCallMessage("Merge calls requires group calling backend support.");
@@ -1118,11 +1383,294 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
     );
 
     const showCallOverlay = callPhase !== "idle";
+    const isIncomingOverlay = callPhase === "incoming";
+    const showFloatingCallPanel = showCallOverlay && !isIncomingOverlay;
+
+    useEffect(() => {
+        if (typeof onCallOverlayChange !== "function") return;
+        onCallOverlayChange(showCallOverlay);
+
+        return () => {
+            onCallOverlayChange(false);
+        };
+    }, [onCallOverlayChange, showCallOverlay]);
+
+    const getFloatingMargins = useCallback(() => {
+        return {
+            horizontal: isMobile ? 8 : 16,
+            verticalBottom: isMobile ? 86 : 14,
+            verticalTop: isMobile ? 8 : 14,
+        };
+    }, [isMobile]);
+
+    const getPanelSize = useCallback(() => {
+        const panelNode = floatingCallPanelRef.current;
+        if (panelNode) {
+            const rect = panelNode.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                return { width: rect.width, height: rect.height };
+            }
+        }
+
+        return {
+            width: isMobile ? Math.max(280, window.innerWidth - 16) : 390,
+            height: isCallPanelCollapsed ? 84 : (isMobile ? Math.min(520, Math.round(window.innerHeight * 0.5)) : 480),
+        };
+    }, [isCallPanelCollapsed, isMobile]);
+
+    const getDefaultFloatingPosition = useCallback(() => {
+        const containerNode = chatContainerRef.current;
+        if (!containerNode || typeof window === "undefined") return null;
+
+        const bounds = containerNode.getBoundingClientRect();
+        const panel = getPanelSize();
+        const margins = getFloatingMargins();
+
+        const minX = margins.horizontal;
+        const maxX = Math.max(minX, bounds.width - panel.width - margins.horizontal);
+        const minY = margins.verticalTop;
+        const maxY = Math.max(minY, bounds.height - panel.height - margins.verticalBottom);
+
+        return { x: maxX, y: maxY };
+    }, [getFloatingMargins, getPanelSize]);
+
+    const clampFloatingPosition = useCallback((position) => {
+        const containerNode = chatContainerRef.current;
+        if (!containerNode || !position) return position;
+
+        const bounds = containerNode.getBoundingClientRect();
+        const panel = getPanelSize();
+        const margins = getFloatingMargins();
+
+        const minX = margins.horizontal;
+        const maxX = Math.max(minX, bounds.width - panel.width - margins.horizontal);
+        const minY = margins.verticalTop;
+        const maxY = Math.max(minY, bounds.height - panel.height - margins.verticalBottom);
+
+        return {
+            x: Math.min(maxX, Math.max(minX, position.x)),
+            y: Math.min(maxY, Math.max(minY, position.y)),
+        };
+    }, [getFloatingMargins, getPanelSize]);
+
+    const snapToNearestCorner = useCallback((position) => {
+        const containerNode = chatContainerRef.current;
+        if (!containerNode || !position) return position;
+
+        const bounds = containerNode.getBoundingClientRect();
+        const panel = getPanelSize();
+        const margins = getFloatingMargins();
+
+        const minX = margins.horizontal;
+        const maxX = Math.max(minX, bounds.width - panel.width - margins.horizontal);
+        const minY = margins.verticalTop;
+        const maxY = Math.max(minY, bounds.height - panel.height - margins.verticalBottom);
+
+        const corners = [
+            { x: minX, y: minY },
+            { x: maxX, y: minY },
+            { x: minX, y: maxY },
+            { x: maxX, y: maxY },
+        ];
+
+        let nearest = corners[0];
+        let nearestDist = Number.POSITIVE_INFINITY;
+
+        for (const corner of corners) {
+            const dx = corner.x - position.x;
+            const dy = corner.y - position.y;
+            const dist = dx * dx + dy * dy;
+            if (dist < nearestDist) {
+                nearest = corner;
+                nearestDist = dist;
+            }
+        }
+
+        return nearest;
+    }, [getFloatingMargins, getPanelSize]);
+
+    const getRememberedCorner = useCallback(() => {
+        if (typeof window === "undefined") return null;
+
+        try {
+            const raw = window.localStorage.getItem(FLOATING_CALL_CORNER_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object") return null;
+
+            const x = Number(parsed.x);
+            const y = Number(parsed.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+            return { x, y };
+        } catch {
+            return null;
+        }
+    }, [FLOATING_CALL_CORNER_KEY]);
+
+    const rememberCorner = useCallback((position) => {
+        if (typeof window === "undefined" || !position) return;
+
+        try {
+            window.localStorage.setItem(FLOATING_CALL_CORNER_KEY, JSON.stringify({ x: position.x, y: position.y }));
+        } catch {
+            // Best-effort persistence only.
+        }
+    }, [FLOATING_CALL_CORNER_KEY]);
+
+    const resetRememberedCorner = useCallback(() => {
+        if (typeof window === "undefined") return;
+        try {
+            window.localStorage.removeItem(FLOATING_CALL_CORNER_KEY);
+        } catch {
+            // Best-effort reset only.
+        }
+    }, [FLOATING_CALL_CORNER_KEY]);
+
+    const resetFloatingCallPanelPosition = useCallback(() => {
+        resetRememberedCorner();
+        const fallbackPosition = getDefaultFloatingPosition();
+        if (!fallbackPosition) return;
+
+        const clamped = clampFloatingPosition(fallbackPosition);
+        setFloatingCallPosition(clamped);
+    }, [clampFloatingPosition, getDefaultFloatingPosition, resetRememberedCorner]);
+
+    const handleFloatingPanelPointerDown = useCallback((event) => {
+        if (!showFloatingCallPanel) return;
+        if (event.button !== 0) return;
+
+        const panelNode = floatingCallPanelRef.current;
+        if (!panelNode) return;
+
+        const nextPosition = floatingCallPosition || getDefaultFloatingPosition();
+        if (!nextPosition) return;
+
+        setFloatingCallPosition(nextPosition);
+        setShowDragInstruction(false);
+        dragRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            originX: nextPosition.x,
+            originY: nextPosition.y,
+            dragging: true,
+        };
+
+        panelNode.setPointerCapture?.(event.pointerId);
+        event.preventDefault();
+    }, [floatingCallPosition, getDefaultFloatingPosition, showFloatingCallPanel]);
+
+    const handleFloatingPanelPointerMove = useCallback((event) => {
+        const dragState = dragRef.current;
+        if (!dragState.dragging || dragState.pointerId !== event.pointerId) return;
+
+        const nextPosition = {
+            x: dragState.originX + (event.clientX - dragState.startX),
+            y: dragState.originY + (event.clientY - dragState.startY),
+        };
+
+        setFloatingCallPosition(clampFloatingPosition(nextPosition));
+    }, [clampFloatingPosition]);
+
+    const finishFloatingDrag = useCallback((event) => {
+        const dragState = dragRef.current;
+        if (!dragState.dragging || dragState.pointerId !== event.pointerId) return;
+
+        const panelNode = floatingCallPanelRef.current;
+        panelNode?.releasePointerCapture?.(event.pointerId);
+
+        dragRef.current.dragging = false;
+        dragRef.current.pointerId = null;
+
+        setFloatingCallPosition((prev) => {
+            if (!prev) return prev;
+            const clamped = clampFloatingPosition(prev);
+            rememberCorner(clamped);
+            return clamped;
+        });
+    }, [clampFloatingPosition, rememberCorner]);
     const hasRemoteVideo = useMemo(() => {
         const stream = remoteStreamRef.current || remoteStream;
         if (!stream) return false;
         return stream.getVideoTracks().some((track) => track.readyState === "live");
     }, [remoteStream]);
+
+    useEffect(() => {
+        if (callPhase === "idle") {
+            setIsCallPanelCollapsed(false);
+            setFloatingCallPosition(null);
+            return;
+        }
+
+        if (callPhase === "incoming") {
+            setIsCallPanelCollapsed(false);
+            setFloatingCallPosition(null);
+        }
+    }, [callPhase]);
+
+    useEffect(() => {
+        if (!showFloatingCallPanel) return;
+
+        setFloatingCallPosition((prev) => {
+            if (!prev) {
+                const remembered = getRememberedCorner();
+                if (remembered) {
+                    return clampFloatingPosition(remembered);
+                }
+                return getDefaultFloatingPosition();
+            }
+            return clampFloatingPosition(prev);
+        });
+    }, [clampFloatingPosition, getDefaultFloatingPosition, getRememberedCorner, isCallPanelCollapsed, showFloatingCallPanel]);
+
+    useEffect(() => {
+        if (!showFloatingCallPanel) return;
+
+        const onResize = () => {
+            setFloatingCallPosition((prev) => {
+                if (!prev) return getDefaultFloatingPosition();
+                return clampFloatingPosition(prev);
+            });
+        };
+
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
+    }, [clampFloatingPosition, getDefaultFloatingPosition, showFloatingCallPanel]);
+
+    useEffect(() => {
+        if (!showFloatingCallPanel) {
+            setShowDragInstruction(false);
+            return;
+        }
+
+        let alreadySeen = false;
+        try {
+            alreadySeen = typeof window !== "undefined" && window.localStorage.getItem(dragHintSeenStorageKey) === "1";
+        } catch {
+            alreadySeen = false;
+        }
+
+        if (alreadySeen) {
+            setShowDragInstruction(false);
+            return;
+        }
+
+        setShowDragInstruction(true);
+        try {
+            if (typeof window !== "undefined") {
+                window.localStorage.setItem(dragHintSeenStorageKey, "1");
+            }
+        } catch {
+            // no-op
+        }
+
+        const timer = setTimeout(() => {
+            setShowDragInstruction(false);
+        }, 5000);
+
+        return () => clearTimeout(timer);
+    }, [showFloatingCallPanel, callPhase, dragHintSeenStorageKey]);
 
     const hasLocalVideo = useMemo(() => {
         const stream = localStreamRef.current || localStream;
@@ -1139,6 +1687,7 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
     }, [callPhase, callType]);
 
     const outputMenuOpen = Boolean(outputMenuAnchorEl);
+    const disableInCallControls = callPhase !== "active" || isRenegotiating;
     const volumeControlLabel =
         audioLevelPreset === "mute"
             ? "Muted"
@@ -1154,10 +1703,18 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
     return (<>
 
         <Box
+            ref={chatContainerRef}
             display='flex'
-            width={isMobile ? '100%' : { sm: '58%', md: '64%', lg: '70%', xl: '74%' }}
+            width={overlayOnlyMode ? 0 : (isMobile ? '100%' : { sm: '58%', md: '64%', lg: '70%', xl: '74%' })}
             height='100dvh'
-            sx={{ minHeight: 0, flex: 1, position: 'relative' }}
+            sx={{
+                minHeight: 0,
+                flex: overlayOnlyMode ? 0 : 1,
+                position: overlayOnlyMode ? 'fixed' : 'relative',
+                inset: overlayOnlyMode ? 0 : 'auto',
+                zIndex: overlayOnlyMode ? 1200 : 'auto',
+                pointerEvents: overlayOnlyMode ? 'none' : 'auto',
+            }}
         >
             <Box
                 component='audio'
@@ -1166,44 +1723,122 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                 playsInline
                 sx={{ display: 'none' }}
             />
-            <Box display='flex' width='100%' flexDirection='column' sx={{ minHeight: 0 }}>
-                <ChatHeader
-                    contactPerson={contactPerson}
-                    userID={userID}
-                    isOnline={contactIsOnline}
-                    lastSeen={contactLastSeen}
-                    showBack={isMobile}
-                    onBack={onBack}
-                    canCall={canCall}
-                    onStartAudioCall={() => startOutgoingCall("audio")}
-                    onStartVideoCall={() => startOutgoingCall("video")}
-                />
-                <ChatMessageList
-                    userID={userID}
-                    contactPerson={contactPerson}
-                    messages={messages}
-                    contactPersonId={contactPersonId}
-                    contactPersonEmail={contactPersonEmail}
-                    fromID={fromID}
-                    fromEmail={fromEmail}
-                />
-            </Box>
+            {!overlayOnlyMode ? (
+                <Box display='flex' width='100%' flexDirection='column' sx={{ minHeight: 0 }}>
+                    <ChatHeader
+                        contactPerson={contactPerson}
+                        userID={userID}
+                        avatarSrc={contactProfileImage}
+                        isOnline={contactIsOnline}
+                        lastSeen={contactLastSeen}
+                        showBack={isMobile}
+                        onBack={onBack}
+                        canCall={canCall}
+                        onStartAudioCall={() => startOutgoingCall("audio")}
+                        onStartVideoCall={() => startOutgoingCall("video")}
+                    />
+                    <ChatMessageList
+                        userID={userID}
+                        contactPerson={contactPerson}
+                        messages={messages}
+                        contactPersonId={contactPersonId}
+                        contactPersonEmail={contactPersonEmail}
+                        fromID={fromID}
+                        fromEmail={fromEmail}
+                    />
+                </Box>
+            ) : null}
 
             {showCallOverlay ? (
                 <Box
+                    ref={floatingCallPanelRef}
+                    onPointerMove={showFloatingCallPanel ? handleFloatingPanelPointerMove : undefined}
+                    onPointerUp={showFloatingCallPanel ? finishFloatingDrag : undefined}
+                    onPointerCancel={showFloatingCallPanel ? finishFloatingDrag : undefined}
                     sx={{
                         position: 'absolute',
-                        inset: 0,
-                        zIndex: 30,
+                        ...(isIncomingOverlay
+                            ? { inset: 0 }
+                            : {
+                                left: floatingCallPosition ? floatingCallPosition.x : undefined,
+                                top: floatingCallPosition ? floatingCallPosition.y : undefined,
+                                width: { xs: 'calc(100% - 16px)', sm: 360, md: 390 },
+                                height: isCallPanelCollapsed ? 84 : { xs: '50vh', sm: 430, md: 480 },
+                                maxHeight: 'calc(100% - 100px)',
+                                borderRadius: 2,
+                                border: '1px solid #2f3133',
+                                boxShadow: '0 14px 36px rgba(0,0,0,0.48)',
+                                overflow: 'hidden',
+                            }),
+                        zIndex: overlayOnlyMode ? 1210 : 30,
                         backgroundColor: '#0f1011',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        p: { xs: 2, md: 3 },
+                        p: isIncomingOverlay ? { xs: 2, md: 3 } : { xs: 1, md: 1.2 },
+                        pointerEvents: 'auto',
                     }}
                 >
-                    <Box textAlign='center' mt={1}>
+                    {showFloatingCallPanel ? (
+                        <Box
+                            sx={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                px: 0.4,
+                                pt: 0.2,
+                                cursor: 'grab',
+                                touchAction: 'none',
+                            }}
+                            onPointerDown={handleFloatingPanelPointerDown}
+                        >
+                            <Box>
+                                <Typography sx={{ color: '#c8cbce', fontSize: 12, fontWeight: 600 }}>
+                                    In call • {callPhase === 'active' ? callDurationLabel : callTitle}
+                                </Typography>
+                                {showDragInstruction ? (
+                                    <Typography
+                                        sx={{
+                                            color: '#90caf9',
+                                            fontSize: 10,
+                                            fontWeight: 700,
+                                            letterSpacing: 0.3,
+                                            mt: 0.1,
+                                            '@keyframes dragHintPulse': {
+                                                '0%': { opacity: 0.45, transform: 'translateX(0px)' },
+                                                '35%': { opacity: 1, transform: 'translateX(3px)' },
+                                                '70%': { opacity: 0.65, transform: 'translateX(-2px)' },
+                                                '100%': { opacity: 0.45, transform: 'translateX(0px)' },
+                                            },
+                                            animation: 'dragHintPulse 1.1s ease-in-out infinite',
+                                        }}
+                                    >
+                                        Drag to move panel
+                                    </Typography>
+                                ) : null}
+                            </Box>
+                            <Box display='flex' alignItems='center' gap={0.3}>
+                                <IconButton
+                                    onClick={resetFloatingCallPanelPosition}
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    sx={{ color: '#e5e5e5', width: 28, height: 28 }}
+                                >
+                                    <RestartAltRoundedIcon fontSize='small' />
+                                </IconButton>
+                                <IconButton
+                                    onClick={() => setIsCallPanelCollapsed((prev) => !prev)}
+                                    onPointerDown={(event) => event.stopPropagation()}
+                                    sx={{ color: '#e5e5e5', width: 28, height: 28 }}
+                                >
+                                    {isCallPanelCollapsed ? <ExpandMoreRoundedIcon fontSize='small' /> : <ExpandLessRoundedIcon fontSize='small' />}
+                                </IconButton>
+                            </Box>
+                        </Box>
+                    ) : null}
+
+                    <Box textAlign='center' mt={showFloatingCallPanel ? 0.25 : 1}>
                         <Typography sx={{ color: '#fff', fontSize: { xs: 20, md: 24 }, fontWeight: 700 }}>
                             {callPeerEmail || contactPerson || 'Call'}
                         </Typography>
@@ -1230,64 +1865,71 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                                 {isOnHold ? 'You are on hold' : 'Peer is on hold'}
                             </Typography>
                         ) : null}
+                        {isRenegotiating ? (
+                            <Typography sx={{ color: '#90caf9', fontSize: { xs: 11, md: 12 }, mt: 0.35, fontWeight: 600 }}>
+                                Updating media settings...
+                            </Typography>
+                        ) : null}
                         <Typography sx={{ color: '#9ea3a6', fontSize: { xs: 11, md: 12 }, mt: 0.2 }}>
                             Peer Mic: {remoteMediaState.micEnabled ? 'On' : 'Off'} • Peer Video: {remoteMediaState.cameraEnabled ? 'On' : 'Off'}
                         </Typography>
                     </Box>
 
-                    <Box
-                        sx={{
-                            position: 'relative',
-                            width: '100%',
-                            flex: 1,
-                            mt: 2,
-                            mb: 2,
-                            borderRadius: 3,
-                            overflow: 'hidden',
-                            backgroundColor: '#1b1d1f',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}
-                    >
-                        {hasRemoteVideo && remoteStream ? (
-                            <Box
-                                component='video'
-                                ref={remoteVideoRef}
-                                autoPlay
-                                muted
-                                playsInline
-                                sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                        ) : (
-                            <Avatar
-                                alt={contactPerson || callPeerEmail || 'Caller'}
-                                src='/dummy.png'
-                                sx={{ width: { xs: 108, md: 144 }, height: { xs: 108, md: 144 } }}
-                            />
-                        )}
+                    {!isCallPanelCollapsed ? (
+                        <Box
+                            sx={{
+                                position: 'relative',
+                                width: '100%',
+                                flex: 1,
+                                mt: showFloatingCallPanel ? 0.8 : 2,
+                                mb: showFloatingCallPanel ? 0.8 : 2,
+                                borderRadius: 3,
+                                overflow: 'hidden',
+                                backgroundColor: '#1b1d1f',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}
+                        >
+                            {hasRemoteVideo && remoteStream ? (
+                                <Box
+                                    component='video'
+                                    ref={remoteVideoRef}
+                                    autoPlay
+                                    muted
+                                    playsInline
+                                    sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                />
+                            ) : (
+                                <Avatar
+                                    alt={contactPerson || callPeerEmail || 'Caller'}
+                                    src={resolveChatAssetUrl(contactProfileImage)}
+                                    sx={{ width: { xs: 92, md: 120 }, height: { xs: 92, md: 120 } }}
+                                />
+                            )}
 
-                        {hasLocalVideo && localStream ? (
-                            <Box
-                                component='video'
-                                ref={localVideoRef}
-                                autoPlay
-                                muted
-                                playsInline
-                                sx={{
-                                    position: 'absolute',
-                                    right: 16,
-                                    bottom: 16,
-                                    width: { xs: 110, md: 170 },
-                                    height: { xs: 150, md: 210 },
-                                    borderRadius: 2,
-                                    objectFit: 'cover',
-                                    backgroundColor: '#000',
-                                    border: '1px solid #3a3a3a',
-                                }}
-                            />
-                        ) : null}
-                    </Box>
+                            {hasLocalVideo && localStream ? (
+                                <Box
+                                    component='video'
+                                    ref={localVideoRef}
+                                    autoPlay
+                                    muted
+                                    playsInline
+                                    sx={{
+                                        position: 'absolute',
+                                        right: 10,
+                                        bottom: 10,
+                                        width: { xs: 84, md: 110 },
+                                        height: { xs: 114, md: 140 },
+                                        borderRadius: 2,
+                                        objectFit: 'cover',
+                                        backgroundColor: '#000',
+                                        border: '1px solid #3a3a3a',
+                                    }}
+                                />
+                            ) : null}
+                        </Box>
+                    ) : null}
 
                     <Box display='flex' alignItems='center' gap={1.25} mb={1.2} flexWrap='wrap' justifyContent='center'>
                         {callPhase === 'incoming' ? (
@@ -1322,12 +1964,14 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                                 <Tooltip title={micEnabled ? 'Mute mic' : 'Unmute mic'}>
                                     <IconButton
                                         onClick={toggleMic}
+                                        disabled={disableInCallControls}
                                         sx={{
                                             width: 46,
                                             height: 46,
                                             backgroundColor: '#2b2d2f',
                                             color: '#fff',
                                             '&:hover': { backgroundColor: '#3a3d40' },
+                                            '&.Mui-disabled': { opacity: 0.45, color: '#b0b0b0' },
                                         }}
                                     >
                                         {micEnabled ? <MicRoundedIcon /> : <MicOffRoundedIcon />}
@@ -1337,12 +1981,14 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                                 <Tooltip title={callType === 'video' ? (cameraEnabled ? 'Turn video off' : 'Turn video on') : 'Enable video'}>
                                     <IconButton
                                         onClick={toggleCamera}
+                                        disabled={disableInCallControls}
                                         sx={{
                                             width: 46,
                                             height: 46,
                                             backgroundColor: '#2b2d2f',
                                             color: '#fff',
                                             '&:hover': { backgroundColor: '#3a3d40' },
+                                            '&.Mui-disabled': { opacity: 0.45, color: '#b0b0b0' },
                                         }}
                                     >
                                         {(callType === 'video' && cameraEnabled) ? <VideocamRoundedIcon /> : <VideocamOffRoundedIcon />}
@@ -1352,12 +1998,14 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                                 <Tooltip title={callType === 'video' ? 'Switch to voice call' : 'Switch to video call'}>
                                     <IconButton
                                         onClick={switchCallMode}
+                                        disabled={disableInCallControls}
                                         sx={{
                                             width: 46,
                                             height: 46,
                                             backgroundColor: '#2b2d2f',
                                             color: '#fff',
                                             '&:hover': { backgroundColor: '#3a3d40' },
+                                            '&.Mui-disabled': { opacity: 0.45, color: '#b0b0b0' },
                                         }}
                                     >
                                         <SwapHorizRoundedIcon />
@@ -1367,12 +2015,14 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                                 <Tooltip title={isOnHold ? 'Resume call' : 'Hold call'}>
                                     <IconButton
                                         onClick={toggleHold}
+                                        disabled={disableInCallControls}
                                         sx={{
                                             width: 46,
                                             height: 46,
                                             backgroundColor: isOnHold ? '#6d4c41' : '#2b2d2f',
                                             color: '#fff',
                                             '&:hover': { backgroundColor: isOnHold ? '#795548' : '#3a3d40' },
+                                            '&.Mui-disabled': { opacity: 0.45, color: '#b0b0b0' },
                                         }}
                                     >
                                         {isOnHold ? <PlayCircleRoundedIcon /> : <PauseCircleRoundedIcon />}
@@ -1382,12 +2032,14 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                                 <Tooltip title={`Voice level: ${volumeControlLabel}`}>
                                     <IconButton
                                         onClick={cycleAudioLevelPreset}
+                                        disabled={disableInCallControls}
                                         sx={{
                                             width: 46,
                                             height: 46,
                                             backgroundColor: '#2b2d2f',
                                             color: '#fff',
                                             '&:hover': { backgroundColor: '#3a3d40' },
+                                            '&.Mui-disabled': { opacity: 0.45, color: '#b0b0b0' },
                                         }}
                                     >
                                         {volumeControlIcon}
@@ -1397,12 +2049,14 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
                                 <Tooltip title='Output device'>
                                     <IconButton
                                         onClick={(event) => setOutputMenuAnchorEl(event.currentTarget)}
+                                        disabled={disableInCallControls}
                                         sx={{
                                             width: 46,
                                             height: 46,
                                             backgroundColor: '#2b2d2f',
                                             color: '#fff',
                                             '&:hover': { backgroundColor: '#3a3d40' },
+                                            '&.Mui-disabled': { opacity: 0.45, color: '#b0b0b0' },
                                         }}
                                     >
                                         <SpeakerRoundedIcon />

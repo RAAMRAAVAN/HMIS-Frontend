@@ -14,6 +14,7 @@ const WhatsApp = () => {
   const [fromID, setFromID] = useState(null);
   const [fromEmail, setFromEmail] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [userProfileImage, setUserProfileImage] = useState(null);
   
   // ====== AUTO LOGIN USING COOKIE SESSION ======
   useEffect(() => {
@@ -37,6 +38,7 @@ const WhatsApp = () => {
           setFromID(String(data.user.id));
           setFromEmail(data.user.email);
           setUserRole(data.user.role || null);
+          setUserProfileImage(data.user.profile_image_url || null);
 
           if (typeof window !== "undefined") {
             sessionStorage.setItem("userID", data.user.name);
@@ -72,6 +74,7 @@ const WhatsApp = () => {
               setFromID={setFromID}
               setFromEmail={setFromEmail}
               setUserRole={setUserRole}
+              setUserProfileImage={setUserProfileImage}
             />
 
           ) : (
@@ -84,6 +87,8 @@ const WhatsApp = () => {
                 fromEmail={fromEmail}
                 userRole={userRole}
                 setUserID={setUserID}
+                initialProfileImage={userProfileImage}
+                setUserProfileImage={setUserProfileImage}
               />
             </>
           )}

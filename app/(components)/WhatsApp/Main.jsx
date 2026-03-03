@@ -8,11 +8,13 @@ import LeftSidebar from "./features/layout/LeftSidebar";
 import ChatsPanel from "./features/chats/ChatsPanel";
 import ChatPanel from "./features/chats/chat/ChatPanel";
 import UserManagementPanel from "./features/users/UserManagementPanel";
+import ProfileSettingsPanel from "./features/settings/ProfileSettingsPanel";
 import { getSocket } from "@/utils/socket";
 import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 import { toEpochMs } from "@/utils/chatTime";
+import { trackCallAnomaly } from "@/utils/callAnomalyTracker";
 
-const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUserID }) => {
+const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUserID, initialProfileImage = null, setUserProfileImage }) => {
   const API_BASE_URL = getChatApiBaseUrl();
   const [contactPerson, setContactPerson] = useState(null);
   const [contactPersonId, setContactPersonId] = useState(null);
@@ -26,6 +28,9 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
   const [historyEmails, setHistoryEmails] = useState([]);
   const [lastMessageAt, setLastMessageAt] = useState({});
   const [incomingCallOffer, setIncomingCallOffer] = useState(null);
+  const [isCallOverlayVisible, setIsCallOverlayVisible] = useState(false);
+  const [currentUserProfileImage, setCurrentUserProfileImage] = useState(initialProfileImage);
+  const [contactProfileImage, setContactProfileImage] = useState(null);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -38,10 +43,31 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
   const isAdminUser = String(userRole || "").toLowerCase() === "admin";
   const isChatsSelected = selected === "Chats";
   const isUsersSelected = isAdminUser && selected === "Users";
+  const isSettingsSelected = selected === "Settings";
+  const shouldRenderChatPanel = (isChatsSelected && (!isMobile || !!contactPersonEmail)) || isCallOverlayVisible;
+  const chatOverlayOnlyMode = !isChatsSelected || (isMobile && !contactPersonEmail);
   const totalUnseenCount = useMemo(
     () => Object.values(unseenCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0),
     [unseenCounts]
   );
+
+  const buildRealtimeCallPreview = useCallback((call = null, isOutgoing = false) => {
+    if (!call || typeof call !== "object") return "Call";
+
+    const callType = call.callType === "video" ? "video" : "voice";
+    const eventType = String(call.eventType || "").toLowerCase();
+
+    if (eventType === "missed") return `Missed ${callType} call`;
+    if (eventType === "declined") return `${isOutgoing ? "Outgoing" : "Incoming"} ${callType} call declined`;
+    if (eventType === "completed") {
+      const totalSeconds = Math.floor(Math.max(0, Number(call.durationMs) || 0) / 1000);
+      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      return `${isOutgoing ? "Outgoing" : "Incoming"} ${callType} call • ${minutes}:${seconds}`;
+    }
+
+    return `${isOutgoing ? "Outgoing" : "Incoming"} ${callType} call`;
+  }, []);
 
   useEffect(() => {
     fromEmailRef.current = fromEmail ? String(fromEmail).toLowerCase() : null;
@@ -98,7 +124,26 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
       isOnline: Boolean(user.is_online),
       lastSeen: user.last_seen || null,
     });
+    setContactProfileImage(user.profile_image_url || null);
   }, [loadUsersIndex]);
+
+  useEffect(() => {
+    setCurrentUserProfileImage(initialProfileImage || null);
+  }, [initialProfileImage]);
+
+  useEffect(() => {
+    if (!contactPersonEmail) {
+      setContactProfileImage(null);
+      return;
+    }
+
+    const emailKey = String(contactPersonEmail || "").toLowerCase();
+    const usersMap = usersByEmailRef.current;
+    const matchedUser = usersMap.get(emailKey);
+    if (matchedUser) {
+      setContactProfileImage(matchedUser.profile_image_url || null);
+    }
+  }, [contactPersonEmail]);
 
   // ⭐ Register socket
   useEffect(() => {
@@ -246,12 +291,47 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
     const handlePrivateMessage = (payload) => {
       const from = String(payload.from ?? payload.fromID ?? payload.fromUserId ?? "").toLowerCase();
       const to = String(payload.to ?? payload.toID ?? payload.toUserId ?? "").toLowerCase();
-      const text = payload.text ?? payload.message ?? "";
+      const rawText = payload.text ?? payload.message ?? "";
       const messageType = payload.messageType || "text";
       const isCallEvent = messageType === "call";
-      if (!from || !to || (!text && !isCallEvent)) return;
-
       const currentFromEmail = fromEmailRef.current;
+      const normalizedCall = isCallEvent && payload.call && typeof payload.call === "object" ? payload.call : null;
+
+      if (isCallEvent && !normalizedCall) {
+        trackCallAnomaly({
+          socket,
+          code: "call-message-missing-call-payload",
+          message: "Call message received without call payload object",
+          severity: "warn",
+          from: currentFromEmail,
+          contact: from || to,
+          details: {
+            messageType,
+            hasText: Boolean(rawText),
+            payloadKeys: Object.keys(payload || {}),
+          },
+        });
+      }
+
+      const text = String(rawText || (isCallEvent ? buildRealtimeCallPreview(normalizedCall, from === currentFromEmail) : ""));
+      if (!from || !to || (!text && !isCallEvent)) {
+        trackCallAnomaly({
+          socket,
+          code: "private-message-invalid-shape",
+          message: "Ignored private message due to missing required fields",
+          severity: "warn",
+          from: currentFromEmail,
+          contact: from || to,
+          details: {
+            hasFrom: Boolean(from),
+            hasTo: Boolean(to),
+            hasText: Boolean(text),
+            isCallEvent,
+          },
+        });
+        return;
+      }
+
       const currentContactEmail = contactEmailRef.current;
       if (!currentFromEmail) return;
 
@@ -262,7 +342,7 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
         text,
         messageType,
         file: payload.file || null,
-        call: payload.call || null,
+        call: normalizedCall,
         timestamp: toEpochMs(payload.timestampMs ?? payload.createdAtMs ?? payload.timestamp ?? payload.createdAt),
       };
 
@@ -339,7 +419,7 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
       socket.off("privateMessage", handlePrivateMessage);
       socket.off("messageStatus", handleMessageStatus);
     };
-  }, [socket]);
+  }, [buildRealtimeCallPreview, socket]);
 
   useEffect(() => {
     if (!socket || !fromEmail) return;
@@ -351,7 +431,27 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
       const from = String(payload.from || "").toLowerCase();
       const callId = String(payload.callId || "").trim();
       const phase = payload.phase === "renegotiate" ? "renegotiate" : "invite";
-      if (!to || !from || !callId || !payload?.sdp || to !== currentUserEmail || phase !== "invite") return;
+      if (!to || !from || !callId || !payload?.sdp || to !== currentUserEmail || phase !== "invite") {
+        if (to === currentUserEmail || (!to && Boolean(currentUserEmail))) {
+          trackCallAnomaly({
+            socket,
+            code: "incoming-offer-invalid",
+            message: "Incoming call offer ignored due to invalid payload",
+            severity: "warn",
+            from: currentUserEmail,
+            contact: from,
+            callId,
+            details: {
+              hasTo: Boolean(to),
+              hasFrom: Boolean(from),
+              hasCallId: Boolean(callId),
+              hasSdp: Boolean(payload?.sdp),
+              phase,
+            },
+          });
+        }
+        return;
+      }
 
       await ensureConversationForEmail(from);
 
@@ -382,6 +482,8 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
             onSelect={setSelected}
             isAdmin={isAdminUser}
             totalUnseenCount={totalUnseenCount}
+            currentUserName={userID}
+            currentUserAvatarSrc={currentUserProfileImage}
           />
           <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />
         </>
@@ -399,6 +501,8 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
           contactPersonEmail={contactPersonEmail}
           setContactPersonEmail={setContactPersonEmail}
           setContactPresence={setContactPresence}
+          setContactProfileImage={setContactProfileImage}
+          currentUserProfileImage={currentUserProfileImage}
           selected={selected}
           lastMessage={lastMessage}
           lastMessageAt={lastMessageAt}
@@ -414,7 +518,7 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
 
       {!isMobile && isChatsSelected && <Divider orientation="vertical" flexItem sx={{ borderColor: '#333' }} />}
 
-      {isChatsSelected && (!isMobile || !!contactPersonEmail) && (
+      {shouldRenderChatPanel && (
         <ChatPanel
           userID={userID}
           fromID={fromID}
@@ -426,9 +530,12 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
           contactPersonEmail={contactPersonEmail}
           contactIsOnline={Boolean(contactPresence?.isOnline)}
           contactLastSeen={contactPresence?.lastSeen || null}
+          contactProfileImage={contactProfileImage}
           messages={messages}
           incomingCallOffer={incomingCallOffer}
           onIncomingCallOfferConsumed={() => setIncomingCallOffer(null)}
+          onCallOverlayChange={setIsCallOverlayVisible}
+          overlayOnlyMode={chatOverlayOnlyMode}
           isMobile={isMobile}
           onBack={() => {
             setContactPerson(null);
@@ -439,6 +546,33 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
       )}
 
       {!isUsersSelected && !isChatsSelected && (
+      isSettingsSelected ? (
+        <ProfileSettingsPanel
+          userName={userID}
+          userEmail={fromEmail}
+          currentProfileImage={currentUserProfileImage}
+          onProfileImageUpdated={(nextUrl) => {
+            const normalized = nextUrl || null;
+            setCurrentUserProfileImage(normalized);
+            setUserProfileImage?.(normalized);
+
+            const ownEmail = String(fromEmail || "").toLowerCase();
+            if (ownEmail) {
+              const updatedMap = new Map(usersByEmailRef.current);
+              const existing = updatedMap.get(ownEmail) || {};
+              updatedMap.set(ownEmail, {
+                ...existing,
+                profile_image_url: normalized,
+              });
+              usersByEmailRef.current = updatedMap;
+            }
+
+            if (String(contactPersonEmail || "").toLowerCase() === String(fromEmail || "").toLowerCase()) {
+              setContactProfileImage(normalized);
+            }
+          }}
+        />
+      ) : (
         <Box
           display='flex'
           flexDirection='column'
@@ -451,6 +585,7 @@ const Main = ({ loading, userID, fromID, fromEmail, userRole, setLoading, setUse
             {selected}
           </Typography>
         </Box>
+      )
       )}
     </Box>
   );

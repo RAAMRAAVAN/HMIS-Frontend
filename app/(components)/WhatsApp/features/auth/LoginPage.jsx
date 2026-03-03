@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { getSocket } from "@/utils/socket";
 import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 
-const LoginPage = ({ userID, setUserID, setFromID, setFromEmail, setUserRole }) => {
+const LoginPage = ({ userID, setUserID, setFromID, setFromEmail, setUserRole, setUserProfileImage }) => {
   const [loginID, setLoginID] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,6 +43,7 @@ const LoginPage = ({ userID, setUserID, setFromID, setFromEmail, setUserRole }) 
       setFromID(String(data.user.id));
       setFromEmail(data.user.email);
       setUserRole(data.user.role || null);
+      setUserProfileImage?.(data.user.profile_image_url || null);
 
       if (typeof window !== "undefined") {
         sessionStorage.setItem("userID", data.user.name);

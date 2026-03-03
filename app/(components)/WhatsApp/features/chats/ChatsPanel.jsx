@@ -8,7 +8,7 @@ import FilterChips from "../../shared/FilterChips";
 import { getChatApiBaseUrl } from "@/utils/chatApiBase";
 import { getSocket } from "@/utils/socket";
 
-const ChatsPanel = ({ userID, setUserID,contactPerson, setContactPerson, selected, setSelected, lastMessage, lastMessageAt = {}, unseenCounts, historyEmails = [], setContactPersonId, setContactPersonEmail, setContactPresence, fromID, fromEmail, isMobile = false }) => {
+const ChatsPanel = ({ userID, setUserID,contactPerson, setContactPerson, selected, setSelected, lastMessage, lastMessageAt = {}, unseenCounts, historyEmails = [], setContactPersonId, setContactPersonEmail, setContactPresence, setContactProfileImage, currentUserProfileImage = null, fromID, fromEmail, isMobile = false }) => {
 
   const [settings1, setSettings1] = useState(false);
   const dropdownRef = useRef(null);
@@ -31,6 +31,7 @@ const ChatsPanel = ({ userID, setUserID,contactPerson, setContactPerson, selecte
     setContactPerson(user.name);
     setContactPersonId(String(user.id));
     setContactPersonEmail(String(user.email).toLowerCase());
+    setContactProfileImage?.(user.profile_image_url || null);
     setContactPresence?.({
       isOnline: Boolean(user.is_online),
       lastSeen: user.last_seen || null,
@@ -137,9 +138,32 @@ const ChatsPanel = ({ userID, setUserID,contactPerson, setContactPerson, selecte
       );
     };
 
+    const handleProfileImageUpdate = (payload) => {
+      const identifier = String(payload?.email || "").toLowerCase();
+      if (!identifier) return;
+
+      setUsers((prev) =>
+        prev.map((user) =>
+          String(user?.email || "").toLowerCase() === identifier
+            ? { ...user, profile_image_url: payload?.profileImageUrl || null }
+            : user
+        )
+      );
+
+      setSuggestions((prev) =>
+        prev.map((user) =>
+          String(user?.email || "").toLowerCase() === identifier
+            ? { ...user, profile_image_url: payload?.profileImageUrl || null }
+            : user
+        )
+      );
+    };
+
     socket.on("presenceUpdate", handlePresenceUpdate);
+    socket.on("profileImageUpdated", handleProfileImageUpdate);
     return () => {
       socket.off("presenceUpdate", handlePresenceUpdate);
+      socket.off("profileImageUpdated", handleProfileImageUpdate);
     };
   }, [socket]);
 
@@ -206,7 +230,8 @@ const ChatsPanel = ({ userID, setUserID,contactPerson, setContactPerson, selecte
       isOnline: Boolean(matchedUser.is_online),
       lastSeen: matchedUser.last_seen || null,
     });
-  }, [contactPerson, userID, users, setContactPresence]);
+    setContactProfileImage?.(matchedUser.profile_image_url || null);
+  }, [contactPerson, userID, users, setContactPresence, setContactProfileImage]);
 
   // 🔹 Close settings dropdown on outside click
   useEffect(() => {
@@ -358,6 +383,7 @@ const ChatsPanel = ({ userID, setUserID,contactPerson, setContactPerson, selecte
                   ID={String(fromID)}
                   selectionStatus={contactPerson === userID}
                   isOnline={true}
+                  avatarSrc={currentUserProfileImage}
                   lastMessage={lastMessage?.[String(fromEmail || "").toLowerCase()] || ""}
                   unseenCount={0}
                   lastSeen={null}
@@ -385,6 +411,7 @@ const ChatsPanel = ({ userID, setUserID,contactPerson, setContactPerson, selecte
                     userID={user.name}
                     ID={user.id}
                     selectionStatus={contactPerson === user.name}
+                    avatarSrc={user.profile_image_url}
                     lastMessage={userLastMessage}
                     unseenCount={unseenCount}
                     isOnline={Boolean(user.is_online)}

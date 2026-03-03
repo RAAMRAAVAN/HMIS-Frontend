@@ -3,8 +3,9 @@ import { KeyboardArrowDown } from "@mui/icons-material";
 import { Avatar, Box, ClickAwayListener, IconButton, Popper, Typography } from "@mui/material";
 import ChatSettingsMenu from "../features/chats/settings/ChatSettingsMenu";
 import { formatLastSeenLabel } from "@/utils/chatTime";
+import { resolveChatAssetUrl } from "@/utils/chatAssetUrl";
 
-const ContactCard = ({ userID,ID, selectionStatus, lastMessage, unseenCount = 0, isOnline = false, lastSeen = null }) => {
+const ContactCard = ({ userID,ID, selectionStatus, lastMessage, unseenCount = 0, isOnline = false, lastSeen = null, avatarSrc = "" }) => {
     const showUnread = unseenCount > 0 && !selectionStatus;
     const [settingsOpen, setSettingsOpen] = useState(false);
     const buttonRef = useRef(null);
@@ -22,7 +23,7 @@ const ContactCard = ({ userID,ID, selectionStatus, lastMessage, unseenCount = 0,
             }
         }}>
             <Box padding={1}>
-                <Avatar alt={userID} src="/dummy.png" sx={{ width: 55, height: 55 }} />
+                <Avatar alt={userID} src={resolveChatAssetUrl(avatarSrc)} sx={{ width: 55, height: 55 }} />
             </Box>
             <Box display='flex' flexDirection='column' width='78%' height='100%' justifyContent='center' minWidth={0}>
                 <Box display='flex' justifyContent='space-between' width='100%' color='white'>

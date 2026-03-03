@@ -1,7 +1,8 @@
 import { DataSaverOff, GroupsRounded, ManageAccountsRounded, MarkUnreadChatAltRounded, SettingsRounded } from "@mui/icons-material";
 import { Avatar, Badge, Box, IconButton, Tooltip } from "@mui/material";
+import { resolveChatAssetUrl } from "@/utils/chatAssetUrl";
 
-const LeftSidebar = ({ selected, onSelect, isAdmin, totalUnseenCount = 0 }) => {
+const LeftSidebar = ({ selected, onSelect, isAdmin, totalUnseenCount = 0, currentUserName, currentUserAvatarSrc }) => {
     
         const getButtonSx = (name) => ({
             marginTop: 1,
@@ -237,7 +238,7 @@ const LeftSidebar = ({ selected, onSelect, isAdmin, totalUnseenCount = 0 }) => {
                 </Tooltip>
                 </Box>
 
-                <Avatar alt="Remy Sharp" src="/dummy.png" />
+                <Avatar alt={currentUserName || "User"} src={resolveChatAssetUrl(currentUserAvatarSrc)} />
             </Box>
 
         </Box>
