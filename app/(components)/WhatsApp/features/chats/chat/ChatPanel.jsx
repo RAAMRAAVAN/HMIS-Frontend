@@ -1725,27 +1725,43 @@ const Chat = ({ userID, contactPerson, messages, contactPersonId, contactPersonE
             />
             {!overlayOnlyMode ? (
                 <Box display='flex' width='100%' flexDirection='column' sx={{ minHeight: 0 }}>
-                    <ChatHeader
-                        contactPerson={contactPerson}
-                        userID={userID}
-                        avatarSrc={contactProfileImage}
-                        isOnline={contactIsOnline}
-                        lastSeen={contactLastSeen}
-                        showBack={isMobile}
-                        onBack={onBack}
-                        canCall={canCall}
-                        onStartAudioCall={() => startOutgoingCall("audio")}
-                        onStartVideoCall={() => startOutgoingCall("video")}
-                    />
-                    <ChatMessageList
-                        userID={userID}
-                        contactPerson={contactPerson}
-                        messages={messages}
-                        contactPersonId={contactPersonId}
-                        contactPersonEmail={contactPersonEmail}
-                        fromID={fromID}
-                        fromEmail={fromEmail}
-                    />
+                    {contactPersonEmail ? (
+                        <>
+                            <ChatHeader
+                                contactPerson={contactPerson}
+                                userID={userID}
+                                avatarSrc={contactProfileImage}
+                                isOnline={contactIsOnline}
+                                lastSeen={contactLastSeen}
+                                showBack={isMobile}
+                                onBack={onBack}
+                                canCall={canCall}
+                                onStartAudioCall={() => startOutgoingCall("audio")}
+                                onStartVideoCall={() => startOutgoingCall("video")}
+                            />
+                            <ChatMessageList
+                                userID={userID}
+                                contactPerson={contactPerson}
+                                messages={messages}
+                                contactPersonId={contactPersonId}
+                                contactPersonEmail={contactPersonEmail}
+                                fromID={fromID}
+                                fromEmail={fromEmail}
+                            />
+                        </>
+                    ) : (
+                        <Box
+                            sx={{
+                                width: '100%',
+                                flex: 1,
+                                minHeight: 0,
+                                backgroundImage: "url('/whatsappbg.png')",
+                                backgroundRepeat: 'repeat',
+                                backgroundSize: 'auto',
+                                backgroundPosition: 'center',
+                            }}
+                        />
+                    )}
                 </Box>
             ) : null}
 
